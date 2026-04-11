@@ -178,7 +178,7 @@
     // НАСТРОЙКИ (БЕЗ ПРОКСИ И ТОКЕНОВ)
     const SHOP_ID = '59632';
     // Предполагаем, что бэкенд развернут на том же домене по пути /api
-    const BASE_URL = window.location.origin.includes('localhost') ? 'http://localhost:3000/api' : '/api';
+    const BASE_URL = window.location.origin + '/api';
 
     const URLS = {
         orders: `${BASE_URL}/seller-openapi/v1/finance/orders?page=0&size=50&shopIds=${SHOP_ID}`,

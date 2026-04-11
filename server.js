@@ -8,15 +8,14 @@ app.use(express.static('.'));
 
 const TOKEN = 'WrySS4WWywOf5hRW5QZdDU6TR7TU38L4cthoMRxSBz0=';
 
-// Самый надежный способ для новых версий Express
-app.get('/api/*', async (req, res) => {
+// Используем синтаксис (.*) — это "захват всего" для Express 5
+app.get('/api/:endpoint(*)', async (req, res) => {
     try {
-        // Получаем чистый путь после /api/
-        const subPath = req.params[0] || req.url.replace('/api/', '').split('?')[0];
+        // endpoint будет содержать всё, что идет после /api/
+        const endpoint = req.params.endpoint;
+        const url = `https://api-seller.uzum.uz/${endpoint}`;
         
-        const url = `https://api-seller.uzum.uz/${subPath}`;
-        
-        console.log(`Запрос к Uzum: ${url}`); // Для отладки в логах Render
+        console.log(`Target URL: ${url}`); // Полезно для логов Render
 
         const response = await axios.get(url, {
             params: req.query,
@@ -28,7 +27,7 @@ app.get('/api/*', async (req, res) => {
         
         res.json(response.data);
     } catch (e) {
-        console.error('Ошибка прокси:', e.message);
+        console.error('Proxy Error:', e.message);
         res.status(500).json({ error: e.message });
     }
 });

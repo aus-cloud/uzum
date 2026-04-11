@@ -1,16 +1,9 @@
 {
   "version": 2,
-  "public": true,
-  "name": "uzum-finance",
   "rewrites": [
     {
       "source": "/api/(.*)",
       "destination": "https://api-seller.uzum.uz/$1"
     }
-  ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "https://api-seller.uzum.uz/$1" },
-    { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }

@@ -1,21 +1,24 @@
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
+const path = require('path');
 const app = express();
 
 app.use(cors());
-app.use(express.static('.'));
+
+// Указываем серверу, где лежат ваши файлы (index.html)
+app.use(express.static(__dirname));
 
 const TOKEN = 'WrySS4WWywOf5hRW5QZdDU6TR7TU38L4cthoMRxSBz0=';
 
-// Используем синтаксис (.*) — это "захват всего" для Express 5
-app.get('/api/:endpoint(*)', async (req, res) => {
+// Используем регулярное выражение напрямую — это работает везде
+app.get(/^\/api\/(.*)/, async (req, res) => {
     try {
-        // endpoint будет содержать всё, что идет после /api/
-        const endpoint = req.params.endpoint;
+        // Извлекаем путь из параметров запроса
+        const endpoint = req.params[0];
         const url = `https://api-seller.uzum.uz/${endpoint}`;
         
-        console.log(`Target URL: ${url}`); // Полезно для логов Render
+        console.log(`Запрос к Uzum: ${url}`);
 
         const response = await axios.get(url, {
             params: req.query,
@@ -27,10 +30,18 @@ app.get('/api/:endpoint(*)', async (req, res) => {
         
         res.json(response.data);
     } catch (e) {
-        console.error('Proxy Error:', e.message);
-        res.status(500).json({ error: e.message });
+        console.error('Ошибка прокси:', e.message);
+        res.status(e.response ? e.response.status : 500).json({ 
+            error: e.message,
+            details: e.response ? e.response.data : null 
+        });
     }
 });
 
+// Для всех остальных запросов отдаем index.html
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+app.listen(PORT, () => console.log(`Сервер запущен на порту ${PORT}`));

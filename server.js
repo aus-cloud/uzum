@@ -8,45 +8,52 @@ app.use(cors());
 
 const TOKEN = 'WrySS4WWywOf5hRW5QZdDU6TR7TU38L4cthoMRxSBz0=';
 
-// 1. Прокси для Uzum
-app.use((req, res, next) => {
-    if (req.url.startsWith('/api')) {
-        // Берем всё, что идет после /api
-        let subPath = req.url.substring(4); 
+// 1. ПРОКСИ ЧЕРЕЗ ФУНКЦИЮ (Никаких путей со звездами)
+const handleProxy = async (req, res) => {
+    try {
+        // Вычисляем путь: отрезаем /api
+        const subPath = req.url.split('?')[0].replace('/api', '');
+        const targetUrl = `https://api-seller.uzum.uz${subPath}`;
         
-        // Формируем чистый URL для Uzum (без дублей слэшей)
-        const uzumUrl = `https://api-seller.uzum.uz${subPath.startsWith('/') ? subPath : '/' + subPath}`;
-        
-        console.log(`[PROXY] Запрос к Uzum: ${uzumUrl}`);
+        console.log(`[PROXY] Направляю на Uzum: ${targetUrl}`);
 
-        axios({
+        const response = await axios({
             method: req.method,
-            url: uzumUrl,
-            headers: { 
-                'Authorization': TOKEN, 
+            url: targetUrl,
+            params: req.query,
+            headers: {
+                'Authorization': TOKEN,
                 'Accept': 'application/json',
                 'User-Agent': 'Mozilla/5.0'
-            },
-            params: req.query, // Параметры из ссылки (page, size, shopIds)
-            data: req.body      // На случай, если будет POST запрос
-        })
-        .then(response => res.json(response.data))
-        .catch(e => {
-            console.error(`[PROXY ERROR]`, e.message);
-            res.status(e.response ? e.response.status : 500).json({ error: e.message });
+            }
         });
-        return;
+        res.json(response.data);
+    } catch (e) {
+        console.error(`[PROXY ERROR] ${e.message}`);
+        res.status(e.response ? e.response.status : 500).json({ 
+            error: "Uzum API Error", 
+            details: e.response ? e.response.data : e.message 
+        });
     }
-    next();
-});
+};
 
-// 2. Раздача статических файлов (index.html, стили)
-app.use(express.static(__dirname));
+// 2. ГЛАВНЫЙ ОБРАБОТЧИК (Middleware)
+app.use((req, res, next) => {
+    // Если это запрос к API
+    if (req.url.startsWith('/api')) {
+        return handleProxy(req, res);
+    }
+    
+    // Если это статический файл (картинка, js, css)
+    if (req.url.includes('.')) {
+        return next();
+    }
 
-// 3. Запасной вариант для всех остальных путей (вместо *)
-app.use((req, res) => {
+    // Во всех остальных случаях отдаем index.html
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+app.use(express.static(__dirname));
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server is running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server started on port ${PORT}`));

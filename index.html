@@ -240,14 +240,14 @@ return 0;
 async function fetchFullData() {
     try {
         const statusEl = document.getElementById('updateStatus');
-        statusEl.innerText = "Запрос через urugchilik.uz...";
+        statusEl.innerText = "Синхронизация...";
 
-        // Формируем правильные пути БЕЗ /api/ в начале
-        const getUrl = (path) => `${MY_PROXY}?path=${encodeURIComponent(path)}&shopId=${SHOP_ID}&token=${encodeURIComponent(TOKEN)}`;
+        // Формируем URL к прокси
+        const getUrl = (path) => `${MY_PROXY}?path=${path}&shopId=${SHOP_ID}&token=${encodeURIComponent(TOKEN)}`;
 
         const [ordersRes, productsRes, balanceRes] = await Promise.all([
             fetch(getUrl('finance/orders')).then(r => r.json()),
-            fetch(getUrl('product/all')).then(r => r.json()), // Здесь уйдет путь: product/all
+            fetch(getUrl('product/all')).then(r => r.json()),
             fetch(getUrl('finance/balance')).then(r => r.json())
         ]);
 

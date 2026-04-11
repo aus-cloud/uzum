@@ -1,10 +1,12 @@
+
+
 {
   "version": 2,
+  "cleanUrls": true,
   "rewrites": [
     {
       "source": "/api/(.*)",
       "destination": "https://api-seller.uzum.uz/$1"
     }
-  ],
-  "cleanUrls": true
+  ]
 }

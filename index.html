@@ -175,23 +175,22 @@
 </div>
 
 <script>
-    // --- НАСТРОЙКИ ---
-    const TOKEN = 'WrySS4WWywOf5hRW5QZdDU6TR7TU38L4cthoMRxSBz0=';
-    const SHOP_ID = '59632'; 
-    const BASE_URL = '/api'; 
+// Внутри index.html в блоке <script>
+const SHOP_ID = '59632'; 
+const BASE_URL = '/api'; // Просто относительный путь, это надежнее всего
 
-    const URLS = {
-        orders: `${BASE_URL}/seller-openapi/v1/finance/orders?page=0&size=50&shopIds=${SHOP_ID}`,
-        products: `${BASE_URL}/seller-openapi/v1/product/all?shopId=${SHOP_ID}`,
-        balance: `${BASE_URL}/seller-openapi/v1/finance/balance`
-    };
+const URLS = {
+    orders: `${BASE_URL}/seller-openapi/v1/finance/orders?page=0&size=50&shopIds=${SHOP_ID}`,
+    products: `${BASE_URL}/seller-openapi/v1/product/all?shopId=${SHOP_ID}`,
+    balance: `${BASE_URL}/seller-openapi/v1/finance/balance`
+};
 
     let MANUAL_PRICES = JSON.parse(localStorage.getItem('uzum_manual_prices')) || {"275QF":1906500,"A27U":3120000,"G34WQ":3175000,"255XF":1770000,"Mi 27":1171000};
-    let salesChart, currentOrders = [], currentProducts = [];
+    let salesChart, currentOrders = [], currentProducts = [], usdRateValue = 12950;
 
     const STATUS_RU = {'PROCESSING':'Сборка','CANCELED':'Отмена','COMPLETED':'Выдан','WAITING':'Ожидание','DELIVERED':'Доставлен','RETURNED':'Возврат','TO_WITHDRAW':'Готов'};
 
-    function formatDate(date) { return new Date(date).toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit'}); }
+    function formatDate(date) { return date.toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit'}); }
 
     function getPurchasePrice(title) {
         if (!title) return 0;
@@ -202,27 +201,15 @@
         return 0;
     }
 
-    // Универсальный загрузчик с заголовками для Vercel/Render
-    async function apiFetch(url) {
-        const response = await fetch(url, {
-            headers: {
-                'Authorization': TOKEN,
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            }
-        });
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        return await response.json();
-    }
-
     async function fetchFullData() {
         try {
             document.getElementById('updateStatus').innerText = "Синхронизация...";
             
+            // Запрашиваем данные через наш собственный бэкенд
             const [ordersRes, productsRes, balanceRes] = await Promise.all([
-                apiFetch(URLS.orders).catch(() => ({})),
-                apiFetch(URLS.products).catch(() => ({})),
-                apiFetch(URLS.balance).catch(() => ({}))
+                fetch(URLS.orders).then(r => r.json()).catch(() => ({})),
+                fetch(URLS.products).then(r => r.json()).catch(() => ({})),
+                fetch(URLS.balance).then(r => r.json()).catch(() => ({}))
             ]);
 
             currentOrders = ordersRes.orderItems || [];
@@ -235,14 +222,11 @@
                 });
             }
 
-            const balance = balanceRes.availableAmount || balanceRes.payload?.availableAmount || 0;
-            document.getElementById('apiBalance').innerText = balance.toLocaleString() + ' сум';
-            
+            document.getElementById('apiBalance').innerText = (balanceRes.availableAmount || 0).toLocaleString() + ' сум';
             renderData(currentOrders);
-            document.getElementById('updateStatus').innerText = "Shop ID: 59632 • " + new Date().toLocaleTimeString();
+            document.getElementById('updateStatus').innerText = "ID: 59632 • " + new Date().toLocaleTimeString();
         } catch (err) {
-            console.error(err);
-            document.getElementById('updateStatus').innerText = "Ошибка API (Проверьте прокси)";
+            document.getElementById('updateStatus').innerText = "Ошибка API (Проверьте сервер)";
         }
     }
 
@@ -263,7 +247,7 @@
 
             if (!isCanceled) {
                 stats.withdraw += profit; stats.cost += purchase; stats.net += rowNet; stats.done++;
-                stats.labels.unshift(formatDate(item.date));
+                stats.labels.unshift(formatDate(new Date(item.date)));
                 stats.values.unshift(item.sellPrice || 0);
             } else stats.cancel++;
 
@@ -271,7 +255,7 @@
                 <tr class="hover:bg-slate-800/40 transition-all ${isCanceled ? 'opacity-30' : ''}">
                     <td class="p-5 font-bold text-xs truncate max-w-[250px] text-slate-300">${item.productTitle}</td>
                     <td class="p-5"><span class="text-[8px] font-black px-2 py-1 rounded bg-slate-900 border border-purple-500/20 text-purple-400">${STATUS_RU[item.status] || item.status}</span></td>
-                    <td class="p-5 text-xs text-slate-500">${formatDate(item.date)}</td>
+                    <td class="p-5 text-xs text-slate-500">${formatDate(new Date(item.date))}</td>
                     <td class="p-5 font-mono text-xs">${(item.sellPrice || 0).toLocaleString()}</td>
                     <td class="p-5 font-mono text-orange-400 text-xs font-bold">${purchase.toLocaleString()}</td>
                     <td class="p-5 font-mono text-emerald-400 text-xs font-bold">${rowNet.toLocaleString()}</td>
@@ -325,6 +309,7 @@
         });
     }
 
+    // Модалка и табы
     function openRoiModal() { document.getElementById('roiModal').classList.remove('hidden'); }
     function closeRoiModal() { document.getElementById('roiModal').classList.add('hidden'); }
     function switchTab(tab) {

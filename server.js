@@ -8,18 +8,27 @@ app.use(express.static('.'));
 
 const TOKEN = 'WrySS4WWywOf5hRW5QZdDU6TR7TU38L4cthoMRxSBz0=';
 
-// Исправленная строка прокси
-app.get('/api/:wildcard*', async (req, res) => {
+// Самый надежный способ для новых версий Express
+app.get('/api/*', async (req, res) => {
     try {
-        // Берем путь после /api/
-        const subPath = req.params.wildcard + req.params[0]; 
-        const url = `https://api-seller.uzum.uz/${subPath}?${new URLSearchParams(req.query).toString()}`;
+        // Получаем чистый путь после /api/
+        const subPath = req.params[0] || req.url.replace('/api/', '').split('?')[0];
         
+        const url = `https://api-seller.uzum.uz/${subPath}`;
+        
+        console.log(`Запрос к Uzum: ${url}`); // Для отладки в логах Render
+
         const response = await axios.get(url, {
-            headers: { 'Authorization': TOKEN, 'Accept': 'application/json' }
+            params: req.query,
+            headers: { 
+                'Authorization': TOKEN, 
+                'Accept': 'application/json' 
+            }
         });
+        
         res.json(response.data);
     } catch (e) {
+        console.error('Ошибка прокси:', e.message);
         res.status(500).json({ error: e.message });
     }
 });

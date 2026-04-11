@@ -210,7 +210,7 @@
 <script>
 const TOKEN='WrySS4WWywOf5hRW5QZdDU6TR7TU38L4cthoMRxSBz0=';
 const SHOP_ID='59632';
-const MY_PROXY = 'https://urugchilik.uz/proxy.php'; 
+const PROXY='https://cors-anywhere.herokuapp.com/';
 const FINANCE_URL=`https://api-seller.uzum.uz/api/seller-openapi/v1/finance/orders?page=0&size=50&shopIds=${SHOP_ID}`;
 const PRODUCTS_URL=`https://api-seller.uzum.uz/api/seller-openapi/v1/product/all?shopId=${SHOP_ID}`;
 const BALANCE_URL=`https://api-seller.uzum.uz/api/seller-openapi/v1/finance/balance`;
@@ -234,54 +234,31 @@ if(cleanTitle.includes(cleanKey))return MANUAL_PRICES[key];
 return 0;
 }
 
-// 1. Указываем твой новый мост в Узбекистане
-const MY_PROXY = 'https://urugchilik.uz/proxy.php'; 
-
-async function fetchFullData() {
-    try {
-        const statusEl = document.getElementById('updateStatus');
-        statusEl.innerText = "Запрос через urugchilik.uz...";
-
-        // 2. Упрощенная функция сборки URL для твоего PHP-скрипта
-        const getUrl = (path) => `${MY_PROXY}?path=${encodeURIComponent(path)}&shopId=${SHOP_ID}&token=${encodeURIComponent(TOKEN)}`;
-
-        // 3. Делаем запросы без лишних headers (их добавит сам PHP на сервере)
-        const [ordersRes, productsRes, balanceRes] = await Promise.all([
-            fetch(getUrl('finance/orders')).then(r => r.json()),
-            fetch(getUrl('product/all')).then(r => r.json()),
-            fetch(getUrl('finance/balance')).then(r => r.json())
-        ]);
-
-        if (ordersRes.error) throw new Error(ordersRes.error);
-
-        currentOrders = ordersRes.orderItems || [];
-        currentProducts = [];
-        
-        if (productsRes.productList) {
-            productsRes.productList.forEach(p => {
-                (p.skuList || []).forEach(sku => {
-                    currentProducts.push({
-                        title: (p.title).trim(), 
-                        price: sku.sellPrice || 0, 
-                        skuId: sku.id
-                    });
-                });
-            });
-        }
-
-        await fetchUsdRate();
-        document.getElementById('apiBalance').innerText = (balanceRes.availableAmount || 0).toLocaleString() + ' сум';
-        
-        renderData(currentOrders);
-        fillFboSelect();
-        fillSimulatorSelect();
-        
-        statusEl.innerText = "ID: 59632 • " + new Date().toLocaleTimeString();
-
-    } catch (err) {
-        console.error(err);
-        document.getElementById('updateStatus').innerText = "Ошибка: проверьте proxy.php";
-    }
+async function fetchFullData(){
+try{
+document.getElementById('updateStatus').innerText="Синхронизация...";
+const headers={'Authorization':TOKEN,'Accept':'application/json'};
+const [ordersRes,productsRes,balanceRes]=await Promise.all([
+fetch(PROXY+FINANCE_URL,{headers}).then(r=>r.json()).catch(()=>({})),
+fetch(PROXY+PRODUCTS_URL,{headers}).then(r=>r.json()).catch(()=>({})),
+fetch(PROXY+BALANCE_URL,{headers}).then(r=>r.json()).catch(()=>({}))
+]);
+currentOrders=ordersRes.orderItems||[];
+currentProducts=[];
+if(productsRes.productList){
+productsRes.productList.forEach(p=>{
+(p.skuList||[]).forEach(sku=>{
+currentProducts.push({title:(p.title).trim(),price:sku.sellPrice||0,skuId:sku.id});
+});
+});
+}
+await fetchUsdRate();
+document.getElementById('apiBalance').innerText=(balanceRes.availableAmount||0).toLocaleString()+' сум';
+renderData(currentOrders);
+fillFboSelect();
+fillSimulatorSelect();
+document.getElementById('updateStatus').innerText="ID: 59632 • "+new Date().toLocaleTimeString();
+}catch(err){document.getElementById('updateStatus').innerText="Ошибка API";}
 }
 
 function renderData(items){

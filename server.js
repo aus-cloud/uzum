@@ -5,43 +5,45 @@ const path = require('path');
 const app = express();
 
 app.use(cors());
-
-// Указываем серверу, где лежат ваши файлы (index.html)
 app.use(express.static(__dirname));
 
 const TOKEN = 'WrySS4WWywOf5hRW5QZdDU6TR7TU38L4cthoMRxSBz0=';
 
-// Используем регулярное выражение напрямую — это работает везде
-app.get(/^\/api\/(.*)/, async (req, res) => {
-    try {
-        // Извлекаем путь из параметров запроса
-        const endpoint = req.params[0];
+// Используем Middleware вместо app.get — это обходит все проверки path-to-regexp
+app.use((req, res, next) => {
+    // Если запрос начинается на /api/
+    if (req.url.startsWith('/api/')) {
+        const endpoint = req.url.replace('/api/', '').split('?')[0];
         const url = `https://api-seller.uzum.uz/${endpoint}`;
         
-        console.log(`Запрос к Uzum: ${url}`);
+        console.log(`Forwarding to Uzum: ${url}`);
 
-        const response = await axios.get(url, {
+        axios.get(url, {
             params: req.query,
             headers: { 
                 'Authorization': TOKEN, 
                 'Accept': 'application/json' 
             }
+        })
+        .then(response => res.json(response.data))
+        .catch(e => {
+            console.error('Uzum Error:', e.message);
+            res.status(e.response ? e.response.status : 500).json({ error: e.message });
         });
-        
-        res.json(response.data);
-    } catch (e) {
-        console.error('Ошибка прокси:', e.message);
-        res.status(e.response ? e.response.status : 500).json({ 
-            error: e.message,
-            details: e.response ? e.response.data : null 
-        });
+    } else {
+        // Если это не API, просто идем дальше (к статическим файлам)
+        next();
     }
 });
 
-// Для всех остальных запросов отдаем index.html
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+// Для всех остальных путей просто отдаем index.html
+app.use((req, res, next) => {
+    if (req.method === 'GET' && !req.url.includes('.')) {
+        res.sendFile(path.join(__dirname, 'index.html'));
+    } else {
+        next();
+    }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Сервер запущен на порту ${PORT}`));
+app.listen(PORT, () => console.log(`Server LIVE on port ${PORT}`));

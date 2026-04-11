@@ -1,28 +1,54 @@
 export default async function handler(req, res) {
+    // Разрешаем CORS сразу
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+
     const { path, shopId } = req.query;
     
-    // Формируем реальный адрес к Uzum
-    let targetUrl = `https://api-seller.uzum.uz/seller-openapi/v1/${path}`;
-    if (shopId) targetUrl += `?shopId=${shopId}&shopIds=${shopId}`;
+    // Исправляем формирование URL
+    const baseUrl = 'https://api-seller.uzum.uz/seller-openapi/v1';
+    let targetUrl = `${baseUrl}/${path}`;
+    
+    // Добавляем параметры корректно
+    const urlWithParams = new URL(targetUrl);
+    if (shopId) {
+        urlWithParams.searchParams.append('shopId', shopId);
+        urlWithParams.searchParams.append('shopIds', shopId);
+    }
+    // Для заказов добавляем дефолтные размер и страницу
+    if (path.includes('orders')) {
+        urlWithParams.searchParams.append('page', '0');
+        urlWithParams.searchParams.append('size', '50');
+    }
 
     try {
-        const response = await fetch(targetUrl, {
+        const response = await fetch(urlWithParams.toString(), {
             method: 'GET',
             headers: {
-                // Здесь можно добавить заголовки, если Uzum их потребует
                 'Accept': 'application/json',
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                // Маскируемся под обычный браузер
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             }
         });
 
-        const data = await response.json();
+        const text = await response.text(); // Сначала получаем текст, чтобы не упасть на пустом ответе
         
-        // Добавляем заголовки CORS, чтобы твой index.html мог читать данные
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET');
-        
-        return res.status(200).json(data);
+        try {
+            const data = JSON.parse(text);
+            return res.status(response.status).json(data);
+        } catch (e) {
+            // Если Uzum вернул не JSON (например, ошибку текстом)
+            return res.status(response.status).send(text);
+        }
+
     } catch (error) {
-        return res.status(500).json({ error: 'Ошибка сервера Uzum', details: error.message });
+        console.error('Proxy Error:', error);
+        return res.status(500).json({ error: 'Server Error', details: error.message });
     }
 }

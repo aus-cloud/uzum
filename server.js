@@ -5,55 +5,56 @@ const path = require('path');
 const app = express();
 
 app.use(cors());
+app.use(express.static(__dirname));
 
 const TOKEN = 'WrySS4WWywOf5hRW5QZdDU6TR7TU38L4cthoMRxSBz0=';
 
-// 1. ПРОКСИ ЧЕРЕЗ ФУНКЦИЮ (Никаких путей со звездами)
-const handleProxy = async (req, res) => {
-    try {
-        // Вычисляем путь: отрезаем /api
-        const subPath = req.url.split('?')[0].replace('/api', '');
-        const targetUrl = `https://api-seller.uzum.uz${subPath}`;
-        
-        console.log(`[PROXY] Направляю на Uzum: ${targetUrl}`);
-
-        const response = await axios({
-            method: req.method,
-            url: targetUrl,
-            params: req.query,
-            headers: {
-                'Authorization': TOKEN,
-                'Accept': 'application/json',
-                'User-Agent': 'Mozilla/5.0'
-            }
-        });
-        res.json(response.data);
-    } catch (e) {
-        console.error(`[PROXY ERROR] ${e.message}`);
-        res.status(e.response ? e.response.status : 500).json({ 
-            error: "Uzum API Error", 
-            details: e.response ? e.response.data : e.message 
-        });
-    }
-};
-
-// 2. ГЛАВНЫЙ ОБРАБОТЧИК (Middleware)
-app.use((req, res, next) => {
-    // Если это запрос к API
+// Обработчик для API
+app.use(async (req, res, next) => {
     if (req.url.startsWith('/api')) {
-        return handleProxy(req, res);
-    }
-    
-    // Если это статический файл (картинка, js, css)
-    if (req.url.includes('.')) {
-        return next();
-    }
+        try {
+            // 1. Берем путь и убираем /api
+            let subPath = req.url.split('?')[0].replace('/api', '');
+            
+            // 2. Убираем лишние слэши в начале, чтобы остался только один
+            subPath = '/' + subPath.replace(/^\/+/, '');
 
-    // Во всех остальных случаях отдаем index.html
-    res.sendFile(path.join(__dirname, 'index.html'));
+            const url = `https://api-seller.uzum.uz${subPath}`;
+            
+            console.log(`[PROXY] Исходящий запрос: ${url}`);
+
+            const response = await axios({
+                method: req.method,
+                url: url,
+                params: req.query, // Важно для shopIds, page, size
+                headers: { 
+                    'Authorization': TOKEN, 
+                    'Accept': 'application/json',
+                    'User-Agent': 'Mozilla/5.0'
+                }
+            });
+            
+            return res.json(response.data);
+        } catch (e) {
+            console.error(`[PROXY ERROR]`, e.message);
+            // Возвращаем ошибку в формате JSON, чтобы фронтенд не ломался
+            const status = e.response ? e.response.status : 500;
+            return res.status(status).json({ 
+                error: "Uzum API Error", 
+                message: e.message,
+                details: e.response ? e.response.data : null
+            });
+        }
+    }
+    next();
 });
 
-app.use(express.static(__dirname));
+// Для SPA (если путей много)
+app.use((req, res) => {
+    if (req.method === 'GET' && !req.url.includes('.')) {
+        res.sendFile(path.join(__dirname, 'index.html'));
+    }
+});
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server started on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Proxy Server ready on port ${PORT}`));

@@ -175,16 +175,15 @@
 </div>
 
 <script>
-    // НАСТРОЙКИ (БЕЗ ПРОКСИ И ТОКЕНОВ)
-    const SHOP_ID = '59632';
-    // Предполагаем, что бэкенд развернут на том же домене по пути /api
-    const BASE_URL = window.location.origin + '/api';
+// Внутри index.html в блоке <script>
+const SHOP_ID = '59632'; 
+const BASE_URL = window.location.origin + '/api'; // БЕЗ лишних слэшей в конце
 
-    const URLS = {
-        orders: `${BASE_URL}/seller-openapi/v1/finance/orders?page=0&size=50&shopIds=${SHOP_ID}`,
-        products: `${BASE_URL}/seller-openapi/v1/product/all?shopId=${SHOP_ID}`,
-        balance: `${BASE_URL}/seller-openapi/v1/finance/balance`
-    };
+const URLS = {
+    orders: `${BASE_URL}/seller-openapi/v1/finance/orders?page=0&size=50&shopIds=${SHOP_ID}`,
+    products: `${BASE_URL}/seller-openapi/v1/product/all?shopId=${SHOP_ID}`,
+    balance: `${BASE_URL}/seller-openapi/v1/finance/balance`
+};
 
     let MANUAL_PRICES = JSON.parse(localStorage.getItem('uzum_manual_prices')) || {"275QF":1906500,"A27U":3120000,"G34WQ":3175000,"255XF":1770000,"Mi 27":1171000};
     let salesChart, currentOrders = [], currentProducts = [], usdRateValue = 12950;

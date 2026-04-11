@@ -242,13 +242,12 @@ async function fetchFullData() {
         const statusEl = document.getElementById('updateStatus');
         statusEl.innerText = "Запрос через urugchilik.uz...";
 
-        // 2. Упрощенная функция сборки URL для твоего PHP-скрипта
+        // Формируем правильные пути БЕЗ /api/ в начале
         const getUrl = (path) => `${MY_PROXY}?path=${encodeURIComponent(path)}&shopId=${SHOP_ID}&token=${encodeURIComponent(TOKEN)}`;
 
-        // 3. Делаем запросы без лишних headers (их добавит сам PHP на сервере)
         const [ordersRes, productsRes, balanceRes] = await Promise.all([
             fetch(getUrl('finance/orders')).then(r => r.json()),
-            fetch(getUrl('product/all')).then(r => r.json()),
+            fetch(getUrl('product/all')).then(r => r.json()), // Здесь уйдет путь: product/all
             fetch(getUrl('finance/balance')).then(r => r.json())
         ]);
 

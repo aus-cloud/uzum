@@ -4,14 +4,17 @@ const cors = require('cors');
 const app = express();
 
 app.use(cors());
-app.use(express.static('.')); // Позволяет серверу отдавать ваш index.html
+app.use(express.static('.'));
 
 const TOKEN = 'WrySS4WWywOf5hRW5QZdDU6TR7TU38L4cthoMRxSBz0=';
 
-// Прокси-запрос
-app.get('/api/*', async (req, res) => {
+// Исправленная строка прокси
+app.get('/api/:wildcard*', async (req, res) => {
     try {
-        const url = `https://api-seller.uzum.uz/${req.params[0]}?${new URLSearchParams(req.query).toString()}`;
+        // Берем путь после /api/
+        const subPath = req.params.wildcard + req.params[0]; 
+        const url = `https://api-seller.uzum.uz/${subPath}?${new URLSearchParams(req.query).toString()}`;
+        
         const response = await axios.get(url, {
             headers: { 'Authorization': TOKEN, 'Accept': 'application/json' }
         });

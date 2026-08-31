@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api-uzum/:path*",
+      "destination": "https://api-seller.uzum.uz/api/seller-openapi/v1/:path*"
+    }
+  ]
+}

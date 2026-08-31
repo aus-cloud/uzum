@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Uzum Finance Pro | Shop 59632</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar{width:4px;}
+        .custom-scrollbar::-webkit-scrollbar-thumb{background:#475569;border-radius:10px;}
+        .tab-active{background-color:#9333ea!important;color:white!important;}
+        .glass-card{background:rgba(30,41,59,0.4);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.05);}
+    </style>
+</head>
+<body class="bg-[#0b0f1a] text-slate-200 font-sans">
+
+<header class="w-full border-b border-slate-800 bg-slate-900/60 p-4 sticky top-0 z-40">
+    <div class="max-w-[1600px] mx-auto flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center font-black">U</div>
+            <div>
+                <h1 class="text-lg font-bold">Finance <span class="text-purple-500">Uzum</span></h1>
+                <p id="updateStatus" class="text-[10px] text-slate-500 uppercase tracking-widest">ID: 59632 • Ожидание...</p>
+            </div>
+        </div>
+        <button onclick="fetchFullData()" class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-xl text-xs font-bold transition-all">Обновить данные</button>
+    </div>
+</header>
+
+<main class="max-w-[1600px] mx-auto p-6">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div class="glass-card p-6 rounded-2xl">
+            <p class="text-slate-500 text-[10px] uppercase font-bold mb-1">Доступно</p>
+            <h2 id="apiBalance" class="text-2xl font-black text-white">0 сум</h2>
+        </div>
+        <div class="glass-card p-6 rounded-2xl">
+            <p class="text-slate-500 text-[10px] uppercase font-bold mb-1">Закуп (Период)</p>
+            <h2 id="totalCost" class="text-2xl font-black text-orange-400">0 сум</h2>
+        </div>
+        <div class="glass-card p-6 rounded-2xl">
+            <p class="text-emerald-500 text-[10px] uppercase font-bold mb-1">Чистая прибыль</p>
+            <h2 id="netProfit" class="text-2xl font-black text-emerald-400">0 сум</h2>
+        </div>
+        <div onclick="openRoiModal()" class="glass-card p-6 rounded-2xl border-purple-500/30 cursor-pointer hover:bg-purple-500/10 transition-all">
+            <p class="text-purple-400 text-[10px] uppercase font-bold mb-1">Средний ROI</p>
+            <h2 id="roi" class="text-2xl font-black text-white">0%</h2>
+        </div>
+    </div>
+
+    <div class="glass-card rounded-2xl overflow-hidden border border-slate-800">
+        <div class="p-4 bg-slate-900/50 border-b border-slate-800 flex justify-between">
+            <h3 class="text-xs font-bold uppercase tracking-widest">Последние транзакции</h3>
+            <select id="timeFilter" onchange="renderData(currentOrders)" class="bg-slate-800 text-[10px] border-none rounded px-2 outline-none">
+                <option value="7">7 дней</option>
+                <option value="30" selected>30 дней</option>
+            </select>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-900 text-slate-500 uppercase font-bold">
+                    <tr>
+                        <th class="p-4">Товар</th>
+                        <th class="p-4">Статус</th>
+                        <th class="p-4">Цена</th>
+                        <th class="p-4">Закуп</th>
+                        <th class="p-4">Прибыль</th>
+                    </tr>
+                </thead>
+                <tbody id="ordersTable" class="divide-y divide-slate-800"></tbody>
+            </table>
+        </div>
+    </div>
+</main>
+
+<div id="roiModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-[#0b0f1a]/95 backdrop-blur-md" onclick="closeRoiModal()"></div>
+    <div class="relative bg-slate-900 border border-slate-700 w-full max-w-5xl rounded-3xl shadow-2xl overflow-hidden">
+        <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
+            <h2 class="text-xl font-bold uppercase">Панель управления</h2>
+            <button onclick="closeRoiModal()" class="text-slate-400 hover:text-white">✕</button>
+        </div>
+        
+        <div class="p-6">
+            <div class="flex gap-2 mb-6">
+                <button onclick="switchTab('fbo')" id="tab-btn-fbo" class="px-6 py-2 rounded-xl text-[10px] font-bold uppercase border border-slate-700 transition-all">План FBO</button>
+                <button onclick="switchTab('prices')" id="tab-btn-prices" class="px-6 py-2 rounded-xl text-[10px] font-bold uppercase border border-slate-700 transition-all">Цены закупа</button>
+            </div>
+
+            <div id="tab-fbo" class="hidden space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-800/30 p-4 rounded-2xl">
+                    <div class="md:col-span-1">
+                        <label class="block text-[10px] text-slate-500 mb-2 uppercase">Товар из каталога</label>
+                        <select id="fboItemSelect" class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-xs text-white outline-none"></select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-slate-500 mb-2 uppercase">Кол-во</label>
+                        <input type="number" id="fboQuantity" value="1" class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-xs">
+                    </div>
+                    <div class="flex items-end">
+                        <button onclick="addToFboList()" class="w-full bg-purple-600 py-3 rounded-xl font-bold text-xs uppercase hover:bg-purple-700 transition-all">Добавить в расчет</button>
+                    </div>
+                </div>
+
+                <div class="border border-slate-800 rounded-2xl overflow-hidden">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-800 text-slate-400 uppercase">
+                            <tr>
+                                <th class="p-4">Название</th>
+                                <th class="p-4 text-center">Кол-во</th>
+                                <th class="p-4">Закуп</th>
+                                <th class="p-4">Ожид. Прибыль</th>
+                                <th class="p-4"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="fboTableBody" class="divide-y divide-slate-800"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="tab-prices" class="hidden">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="space-y-4">
+                        <h4 class="text-xs font-bold uppercase text-purple-400">Добавить цену закупа</h4>
+                        <input type="text" id="newPriceKey" placeholder="Модель (например, A27U)" class="w-full bg-slate-800 p-3 rounded-xl text-xs outline-none border border-slate-700">
+                        <input type="number" id="newPriceValue" placeholder="Сумма в сум" class="w-full bg-slate-800 p-3 rounded-xl text-xs outline-none border border-slate-700">
+                        <button onclick="addManualPrice()" class="w-full bg-emerald-600 py-3 rounded-xl font-bold text-xs uppercase">Сохранить цену</button>
+                    </div>
+                    <div class="max-h-[300px] overflow-y-auto custom-scrollbar">
+                        <table class="w-full text-[10px] uppercase">
+                            <tbody id="manualPriceList" class="divide-y divide-slate-800"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const TOKEN='WrySS4WWywOf5hRW5QZdDU6TR7TU38L4cthoMRxSBz0=';
+    const SHOP_ID='59632';
+    const PROXY='https://cors-anywhere.herokuapp.com/';
+    
+    // ЭНДПОИНТЫ
+    const FINANCE_URL=`https://api-seller.uzum.uz/api/seller-openapi/v1/finance/orders?page=0&size=100&shopIds=${SHOP_ID}`;
+    const PRODUCTS_URL=`https://api-seller.uzum.uz/api/seller-openapi/v1/product/all?shopId=${SHOP_ID}`; 
+    const BALANCE_URL=`https://api-seller.uzum.uz/api/seller-openapi/v1/finance/balance`;
+
+    let MANUAL_PRICES=JSON.parse(localStorage.getItem('uzum_manual_prices'))||{"275QF":1906500,"A27U":3120000,"G34WQ":3175000};
+    let currentOrders=[], currentProducts=[], fboList=[];
+
+    // ЗАГРУЗКА ДАННЫХ
+    async function fetchFullData(){
+        try {
+            document.getElementById('updateStatus').innerText="Загрузка...";
+            const headers={'Authorization': TOKEN, 'Accept': 'application/json'};
+
+            // 1. Загрузка товаров
+            console.log("Запрос товаров...");
+            const pRes = await fetch(PROXY + PRODUCTS_URL, {headers});
+            const pData = await pRes.json();
+            console.log("Ответ по товарам:", pData);
+
+            currentProducts = [];
+            const list = Array.isArray(pData) ? pData : (pData.productList || []);
+            
+            list.forEach(p => {
+                (p.skuList || []).forEach(sku => {
+                    currentProducts.push({
+                        title: p.title,
+                        price: sku.sellPrice || 0,
+                        skuId: sku.id
+                    });
+                });
+            });
+
+            // 2. Загрузка финансов
+            const [oRes, bRes] = await Promise.all([
+                fetch(PROXY+FINANCE_URL, {headers}).then(r=>r.json()),
+                fetch(PROXY+BALANCE_URL, {headers}).then(r=>r.json())
+            ]);
+
+            currentOrders = oRes.orderItems || [];
+            document.getElementById('apiBalance').innerText = (bRes.availableAmount || 0).toLocaleString() + ' сум';
+
+            renderData(currentOrders);
+            fillFboSelect(); // Наполняем селект после загрузки
+            
+            document.getElementById('updateStatus').innerText="Обновлено: " + new Date().toLocaleTimeString();
+        } catch (e) {
+            console.error("Ошибка запроса:", e);
+            document.getElementById('updateStatus').innerText="Ошибка API. Проверьте CORS.";
+        }
+    }
+
+    // НАПОЛНЕНИЕ СПИСКА ТОВАРОВ В МОДАЛКЕ
+    function fillFboSelect(){
+        const select = document.getElementById('fboItemSelect');
+        if(!select) return;
+        
+        console.log("Наполнение селекта, товаров:", currentProducts.length);
+
+        if(currentProducts.length === 0){
+            select.innerHTML = '<option value="">Товары не подгрузились</option>';
+            return;
+        }
+
+        select.innerHTML = currentProducts.map(p => 
+            `<option value="${p.skuId}">${p.title.substring(0, 40)}... (${p.price.toLocaleString()} сум)</option>`
+        ).join('');
+    }
+
+    function renderData(items){
+        const days = parseInt(document.getElementById('timeFilter').value);
+        const limit = days * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        const tbody = document.getElementById('ordersTable');
+        tbody.innerHTML = '';
+        
+        let tCost=0, tNet=0;
+
+        items.filter(i => (now - i.date) < limit).forEach(i => {
+            const isOk = i.status === 'COMPLETED';
+            const buy = getPurchasePrice(i.productTitle);
+            const profit = i.sellerProfit || 0;
+            const net = isOk ? (profit - buy) : 0;
+
+            if(isOk) { tCost += buy; tNet += net; }
+
+            tbody.innerHTML += `
+                <tr class="hover:bg-slate-800/30 ${!isOk ? 'opacity-40' : ''}">
+                    <td class="p-4 font-bold">${i.productTitle.substring(0, 30)}...</td>
+                    <td class="p-4"><span class="bg-slate-800 px-2 py-1 rounded text-[10px]">${i.status}</span></td>
+                    <td class="p-4">${(i.sellPrice || 0).toLocaleString()}</td>
+                    <td class="p-4 text-orange-400">${buy.toLocaleString()}</td>
+                    <td class="p-4 text-emerald-400">${net.toLocaleString()}</td>
+                </tr>
+            `;
+        });
+
+        document.getElementById('totalCost').innerText = tCost.toLocaleString() + ' сум';
+        document.getElementById('netProfit').innerText = tNet.toLocaleString() + ' сум';
+        document.getElementById('roi').innerText = tCost > 0 ? (tNet/tCost*100).toFixed(1) + '%' : '0%';
+    }
+
+    function getPurchasePrice(title){
+        const t = title.toLowerCase();
+        for(let k in MANUAL_PRICES){
+            if(t.includes(k.toLowerCase())) return MANUAL_PRICES[k];
+        }
+        return 0;
+    }
+
+    // ЛОГИКА ТАБОВ
+    function switchTab(tab){
+        document.getElementById('tab-fbo').classList.add('hidden');
+        document.getElementById('tab-prices').classList.add('hidden');
+        document.getElementById('tab-btn-fbo').classList.remove('tab-active');
+        document.getElementById('tab-btn-prices').classList.remove('tab-active');
+
+        document.getElementById('tab-' + tab).classList.remove('hidden');
+        document.getElementById('tab-btn-' + tab).classList.add('tab-active');
+        
+        if(tab === 'prices') renderPriceList();
+        if(tab === 'fbo') fillFboSelect();
+    }
+
+    // ДОБАВЛЕНИЕ В ПЛАН FBO
+    function addToFboList(){
+        const select = document.getElementById('fboItemSelect');
+        const qty = parseInt(document.getElementById('fboQuantity').value);
+        if(!select.value || qty <= 0) return;
+
+        const prod = currentProducts.find(p => p.skuId == select.value);
+        const buy = getPurchasePrice(prod.title);
+        
+        // Расчет (примерный: цена - 10% комиссия - 15к логистика)
+        const estProfit = (prod.price * 0.90 - 15000) - buy;
+
+        fboList.push({
+            title: prod.title,
+            qty: qty,
+            buy: buy * qty,
+            net: estProfit * qty
+        });
+
+        renderFboTable();
+    }
+
+    function renderFboTable(){
+        const tbody = document.getElementById('fboTableBody');
+        tbody.innerHTML = fboList.map((item, idx) => `
+            <tr>
+                <td class="p-4">${item.title.substring(0, 30)}...</td>
+                <td class="p-4 text-center">${item.qty}</td>
+                <td class="p-4 text-orange-400">${item.buy.toLocaleString()}</td>
+                <td class="p-4 text-emerald-400">${item.net.toLocaleString()}</td>
+                <td class="p-4 text-right"><button onclick="fboList.splice(${idx},1);renderFboTable()" class="text-red-500">✕</button></td>
+            </tr>
+        `).join('');
+    }
+
+    // УПРАВЛЕНИЕ ЦЕНАМИ
+    function renderPriceList(){
+        const tbody = document.getElementById('manualPriceList');
+        tbody.innerHTML = '';
+        for(let k in MANUAL_PRICES){
+            tbody.innerHTML += `<tr><td class="p-2">${k}</td><td class="p-2 text-right">${MANUAL_PRICES[k].toLocaleString()}</td><td class="p-2 text-right"><button onclick="deletePrice('${k}')" class="text-red-500">Удалить</button></td></tr>`;
+        }
+    }
+
+    function addManualPrice(){
+        const k = document.getElementById('newPriceKey').value;
+        const v = parseFloat(document.getElementById('newPriceValue').value);
+        if(!k || !v) return;
+        MANUAL_PRICES[k] = v;
+        localStorage.setItem('uzum_manual_prices', JSON.stringify(MANUAL_PRICES));
+        renderPriceList();
+        renderData(currentOrders);
+    }
+
+    function deletePrice(k){
+        delete MANUAL_PRICES[k];
+        localStorage.setItem('uzum_manual_prices', JSON.stringify(MANUAL_PRICES));
+        renderPriceList();
+    }
+
+    function openRoiModal(){ document.getElementById('roiModal').classList.remove('hidden'); switchTab('fbo'); }
+    function closeRoiModal(){ document.getElementById('roiModal').classList.add('hidden'); }
+
+    window.onload = fetchFullData;
+</script>
+</body>
+</html>

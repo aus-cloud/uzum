@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Uzum Finance Pro | Full Dashboard 2026</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar{width:4px;}
+        .custom-scrollbar::-webkit-scrollbar-thumb{background:#475569;border-radius:10px;}
+        .glass-card{background:rgba(30,41,59,0.4);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.05);}
+        .tab-active{background-color:#9333ea!important;color:white!important;box-shadow:0 10px 15px -3px rgba(147,51,234,0.3);}
+        .ai-card{border-left:4px solid #9333ea;animation:slideIn 0.3s ease-out;}
+        .test-order-row{opacity: 0.5; background: rgba(71, 85, 105, 0.1);}
+        @keyframes slideIn{from{opacity:0;transform:translateX(10px);}to{opacity:1;transform:translateX(0);}}
+        
+        /* Стили для чекбоксов */
+        .shop-cb { display: none; }
+        .shop-label { 
+            cursor: pointer; padding: 6px 12px; border-radius: 10px; border: 1px solid #334155; 
+            font-size: 10px; font-weight: bold; transition: all 0.2s; color: #94a3b8;
+        }
+        .shop-cb:checked + .shop-label {
+            background: #9333ea; border-color: #a855f7; color: white;
+        }
+    </style>
+</head>
+<body class="bg-[#0b0f1a] text-slate-200 font-sans">
+
+<header class="w-full border-b border-slate-800 bg-slate-900/60 backdrop-blur-xl sticky top-0 z-40">
+    <div class="max-w-[1600px] mx-auto px-6 py-4 flex flex-wrap justify-between items-center gap-4">
+        <div class="flex items-center gap-4">
+            <div class="w-10 h-10 bg-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-xl font-black text-white italic uppercase leading-none">Finance <span class="text-purple-500">Uzum</span></h1>
+                <p id="updateStatus" class="text-slate-500 text-[9px] uppercase mt-1 font-bold tracking-[0.2em]">Ожидание...</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 bg-slate-800/40 p-1.5 rounded-2xl border border-slate-700/50">
+            <div class="flex gap-1">
+                <input type="checkbox" id="shop-59632" class="shop-cb" value="59632" checked onchange="fetchFullData()">
+                <label for="shop-59632" class="shop-label">Intell</label>
+
+                <input type="checkbox" id="shop-80147" class="shop-cb" value="80147" checked onchange="fetchFullData()">
+                <label for="shop-80147" class="shop-label">TechOutlet 1</label>
+
+                <input type="checkbox" id="shop-55677" class="shop-cb" value="55677" checked onchange="fetchFullData()">
+                <label for="shop-55677" class="shop-label">TechOutlet 2</label>
+
+                <input type="checkbox" id="shop-81556" class="shop-cb" value="81556" checked onchange="fetchFullData()">
+                <label for="shop-81556" class="shop-label">Jihozuuz</label>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <select id="timeFilter" onchange="renderData(currentOrders)" class="bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-xs text-white outline-none">
+                <option value="1">Сегодня</option>
+                <option value="7">Неделя</option>
+                <option value="30" selected>Месяц</option>
+                <option value="90">Квартал</option>
+            </select>
+            <button onclick="fetchFullData()" class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-xl font-bold text-xs transition-all active:scale-95 shadow-lg shadow-purple-500/20">Обновить</button>
+        </div>
+    </div>
+</header>
+
+<main class="max-w-[1600px] mx-auto p-6">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div class="glass-card p-6 rounded-3xl flex justify-between items-center border-blue-500/10">
+            <div class="w-1/2 border-r border-slate-700/50">
+                <p class="text-blue-400 text-[10px] uppercase font-bold mb-2">Выкуп</p>
+                <h2 id="buyoutStats" class="text-2xl font-black text-blue-100">0 / 0%</h2>
+            </div>
+            <div class="w-1/2 pl-6">
+                <p class="text-red-400 text-[10px] uppercase font-bold mb-2">Отмены</p>
+                <h2 id="cancelStats" class="text-2xl font-black text-red-400">0 / 0%</h2>
+            </div>
+        </div>
+
+        <div class="glass-card p-6 rounded-3xl border-emerald-500/20">
+            <p class="text-emerald-500 text-[10px] uppercase font-bold mb-2">Чистая прибыль</p>
+            <h2 id="netProfit" class="text-2xl font-black text-emerald-400">0 сум</h2>
+        </div>
+
+        <div onclick="openRoiModal()" class="glass-card p-6 rounded-3xl cursor-pointer hover:bg-purple-600/10 transition-all border-purple-500/30">
+            <p class="text-purple-400 text-[10px] uppercase font-bold mb-2">Управление / FBO / ROI</p>
+            <h2 id="roi" class="text-2xl font-black text-white">0%</h2>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+        <div class="lg:col-span-2 glass-card p-6 rounded-[2rem] h-[350px]">
+            <canvas id="salesChart"></canvas>
+        </div>
+        <div class="glass-card p-6 rounded-[2rem]">
+            <h3 class="text-white text-xs font-bold uppercase mb-4">Советник ИИ 🧠</h3>
+            <div id="taskbar" class="space-y-3 overflow-y-auto max-h-[250px] custom-scrollbar"></div>
+        </div>
+    </div>
+
+    <div class="glass-card rounded-[2rem] overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm whitespace-nowrap">
+                <thead class="bg-slate-900/80 text-slate-500 text-[10px] uppercase font-bold">
+                    <tr>
+                        <th class="p-5">Товар</th>
+                        <th class="p-5">Статус</th>
+                        <th class="p-5">Дата</th>
+                        <th class="p-5">Продажа</th>
+                        <th class="p-5 text-orange-400">Закуп</th>
+                        <th class="p-5 text-emerald-400">Чистая</th>
+                    </tr>
+                </thead>
+                <tbody id="ordersTable" class="divide-y divide-slate-800/50"></tbody>
+            </table>
+        </div>
+    </div>
+</main>
+
+<div id="roiModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-[#0b0f1a]/95 backdrop-blur-md" onclick="closeRoiModal()"></div>
+    <div class="relative bg-slate-900 border border-slate-700 w-full max-w-[95%] max-h-[90vh] overflow-y-auto rounded-[2.5rem] shadow-2xl custom-scrollbar">
+        <div class="p-8 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-900/90 z-10">
+            <h2 class="text-2xl font-black text-white italic uppercase">Control <span class="text-purple-500">Center</span></h2>
+            <div class="flex items-center gap-6">
+                <div class="text-right">
+                    <p class="text-[9px] text-slate-500 font-bold uppercase">Курс ЦБ РУз</p>
+                    <p id="courseIndicator" class="text-emerald-400 font-black italic">---</p>
+                </div>
+                <button onclick="closeRoiModal()" class="text-slate-400 text-2xl hover:text-white transition-all">✕</button>
+            </div>
+        </div>
+
+        <div class="p-8">
+            <div class="flex gap-2 mb-8 bg-slate-800/50 p-2 rounded-2xl w-fit">
+                <button onclick="switchTab('fbo')" id="tab-btn-fbo" class="px-6 py-2 rounded-xl text-[10px] font-black uppercase transition-all">FBO План</button>
+                <button onclick="switchTab('prices')" id="tab-btn-prices" class="px-6 py-2 rounded-xl text-[10px] font-black uppercase transition-all">База цен закупа</button>
+                <button onclick="switchTab('analytics')" id="tab-btn-analytics" class="px-6 py-2 rounded-xl text-[10px] font-black uppercase transition-all">Анализ маржи</button>
+            </div>
+
+            <div id="tab-fbo" class="hidden">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 items-end bg-slate-800/30 p-6 rounded-3xl border border-slate-700/50">
+                    <div class="md:col-span-2">
+                        <label class="text-[10px] text-slate-500 uppercase font-bold ml-2">Товар</label>
+                        <select id="fboItemSelect" class="w-full bg-slate-900 border border-slate-700 p-4 rounded-xl text-xs text-white mt-2 outline-none focus:border-purple-500"></select>
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-slate-500 uppercase font-bold ml-2">Кол-во</label>
+                        <input type="number" id="fboQuantity" value="1" class="w-full bg-slate-900 border border-slate-700 p-4 rounded-xl text-xs text-white mt-2 outline-none">
+                    </div>
+                    <button onclick="addToFboList()" class="bg-purple-600 hover:bg-purple-700 py-4 rounded-xl font-black text-[10px] uppercase shadow-lg">Добавить в расчет</button>
+                </div>
+                <div class="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden">
+                    <table class="w-full text-xs text-left">
+                        <thead class="bg-slate-800/80 text-slate-400 uppercase font-black">
+                            <tr>
+                                <th class="p-5">Товар</th>
+                                <th class="p-5 text-center">Кол-во</th>
+                                <th class="p-5">Цена продажи</th>
+                                <th class="p-5 text-orange-400">Закуп (S/$)</th>
+                                <th class="p-5 text-emerald-400">Чистая (S/$)</th>
+                                <th class="p-5 text-right">Удалить</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fboTableBody" class="divide-y divide-slate-800"></tbody>
+                        <tfoot class="bg-slate-800/50 font-black text-white">
+                            <tr>
+                                <td class="p-5 italic text-purple-400">ИТОГО ПО ПЛАНУ:</td>
+                                <td id="fboTotalQty" class="p-5 text-center">-</td>
+                                <td class="p-5">-</td>
+                                <td id="fboTotalCost" class="p-5 text-orange-400">-</td>
+                                <td id="fboTotalNet" class="p-5 text-emerald-400">-</td>
+                                <td class="p-5"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <div id="tab-prices" class="hidden">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div class="bg-slate-800/40 p-6 rounded-3xl border border-slate-700">
+                        <h3 class="text-white font-bold text-xs uppercase mb-4 italic">Новая позиция</h3>
+                        <div class="space-y-4">
+                            <input type="text" id="newPriceKey" placeholder="Название или часть названия" class="w-full bg-slate-900 border border-slate-700 p-4 rounded-xl text-xs text-white outline-none">
+                            <div class="flex gap-2">
+                                <input type="number" id="newPriceValue" placeholder="Сумма" class="flex-1 bg-slate-900 border border-slate-700 p-4 rounded-xl text-xs text-white outline-none">
+                                <select id="currencySelect" class="bg-slate-800 border-none rounded-xl text-[10px] font-black text-purple-400 px-3 cursor-pointer">
+                                    <option value="UZS">UZS</option>
+                                    <option value="USD">USD</option>
+                                </select>
+                            </div>
+                            <button onclick="addManualPrice()" class="w-full bg-purple-600 py-4 rounded-xl font-black text-[10px] uppercase hover:bg-purple-700 transition-all">Сохранить цену</button>
+                        </div>
+                    </div>
+                    <div class="md:col-span-2 bg-slate-800/20 rounded-3xl border border-slate-800 overflow-hidden">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-slate-800/50 text-slate-400 uppercase font-black">
+                                <tr>
+                                    <th class="p-4">Ключ поиска</th>
+                                    <th class="p-4 text-orange-400">UZS</th>
+                                    <th class="p-4 text-purple-400">USD</th>
+                                    <th class="p-4 text-right">Действие</th>
+                                </tr>
+                            </thead>
+                            <tbody id="manualPriceList" class="divide-y divide-slate-800"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-analytics" class="hidden">
+                <div id="riskTable" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const TOKEN='WrySS4WWywOf5hRW5QZdDU6TR7TU38L4cthoMRxSBz0=';
+    const PROXY='https://cors-anywhere.herokuapp.com/';
+    const BASE_URL = 'https://api-seller.uzum.uz/api/seller-openapi/v1/finance';
+
+    let MANUAL_PRICES = JSON.parse(localStorage.getItem('uzum_manual_prices')) || {};
+    let currentOrders = [], fboList = [], salesChart;
+    let usdRateValue = 12900; 
+
+    const STATUS_RU={'PROCESSING':'Сборка','CANCELED':'Отмена','COMPLETED':'Выдан','WAITING':'Ожидание','DELIVERED':'Доставлен','RETURNED':'Возврат','TO_WITHDRAW':'Готов'};
+
+    async function fetchFullData(){
+        try {
+            document.getElementById('updateStatus').innerText="Синхронизация...";
+            
+            // Собираем ID выбранных магазинов
+            const checkedShops = Array.from(document.querySelectorAll('.shop-cb:checked')).map(cb => cb.value);
+            const shopIds = checkedShops.join(',');
+
+            if(!shopIds) {
+                document.getElementById('updateStatus').innerText="Выберите магазин";
+                return;
+            }
+
+            const headers={'Authorization':TOKEN,'Accept':'application/json'};
+            
+            const [ordersRes, cbuRes] = await Promise.all([
+                fetch(`${PROXY}${BASE_URL}/orders?page=0&size=100&shopIds=${shopIds}`,{headers}).then(r=>r.json()).catch(()=>({orderItems:[]})),
+                fetch('https://cbu.uz/ru/arkhiv-kursov-valyut/json/').then(r=>r.json())
+            ]);
+
+            currentOrders = ordersRes.orderItems || [];
+            const usdData = cbuRes.find(c=>c.Code==='840');
+            if(usdData) usdRateValue = parseFloat(usdData.Rate);
+            
+            document.getElementById('courseIndicator').innerText = `$1 = ${usdRateValue.toLocaleString()} UZS`;
+            
+            renderData(currentOrders);
+            document.getElementById('updateStatus').innerText = `Обновлено в ${new Date().toLocaleTimeString()}`;
+        } catch(err) {
+            console.error(err);
+            document.getElementById('updateStatus').innerText="Ошибка API";
+        }
+    }
+
+    function getPurchasePrice(title){
+        if(!title) return 0;
+        const cleanTitle=String(title).toLowerCase().replace(/[^a-z0-9а-яё]/gi,'');
+        for(let key in MANUAL_PRICES){
+            const cleanKey=String(key).toLowerCase().replace(/[^a-z0-9а-яё]/gi,'');
+            if(cleanTitle.includes(cleanKey)) return MANUAL_PRICES[key];
+        }
+        return 0;
+    }
+
+    function addManualPrice(){
+        const key = document.getElementById('newPriceKey').value;
+        let val = parseFloat(document.getElementById('newPriceValue').value);
+        if(!key || isNaN(val)) return;
+        if(document.getElementById('currencySelect').value === 'USD') val = val * usdRateValue;
+        MANUAL_PRICES[key] = val;
+        localStorage.setItem('uzum_manual_prices', JSON.stringify(MANUAL_PRICES));
+        renderManualPriceList(); 
+        renderData(currentOrders);
+    }
+
+    function deletePrice(key){
+        delete MANUAL_PRICES[key];
+        localStorage.setItem('uzum_manual_prices', JSON.stringify(MANUAL_PRICES));
+        renderManualPriceList();
+        renderData(currentOrders);
+    }
+
+    function renderManualPriceList(){
+        const tbody=document.getElementById('manualPriceList'); tbody.innerHTML='';
+        for(let key in MANUAL_PRICES){
+            const uzs = MANUAL_PRICES[key];
+            const usd = (uzs / usdRateValue).toFixed(2);
+            tbody.innerHTML+=`
+                <tr class="hover:bg-slate-800/30">
+                    <td class="p-4 font-bold text-white text-xs">${key}</td>
+                    <td class="p-4 font-mono text-orange-400">${uzs.toLocaleString()} сум</td>
+                    <td class="p-4 font-mono text-purple-400 font-black">$ ${usd}</td>
+                    <td class="p-4 text-right"><button onclick="deletePrice('${key}')" class="text-red-500 font-black hover:scale-125 transition-all">✕</button></td>
+                </tr>`;
+        }
+    }
+
+    function renderData(items){
+        const daysLimit=parseInt(document.getElementById('timeFilter').value);
+        const msLimit=daysLimit*24*60*60*1000;
+        const now=new Date().getTime();
+
+        let stats={withdraw:0,cost:0,net:0,labels:[],values:[],done:0,cancel:0,totalCount:0};
+        const tbody=document.getElementById('ordersTable');
+        const riskDiv=document.getElementById('riskTable');
+        tbody.innerHTML=''; riskDiv.innerHTML='';
+
+        items.filter(item=>(now-item.date)<msLimit).forEach(item=>{
+            const isCanceled=(item.status==='CANCELED'||item.status==='RETURNED');
+            const isTest = (item.sellPrice <= 10000); 
+            const purchase=getPurchasePrice(item.productTitle);
+            const profit=item.sellerProfit||0;
+            const rowNet=isCanceled?0:(profit-purchase);
+
+            if(!isTest) {
+                stats.totalCount++;
+                if(!isCanceled){
+                    stats.withdraw+=profit; stats.cost+=purchase; stats.net+=rowNet; stats.done++;
+                    stats.labels.unshift(new Date(item.date).toLocaleDateString());
+                    stats.values.unshift(item.sellPrice||0);
+                } else stats.cancel++;
+            }
+
+            let rowClass = "";
+            if(isTest) rowClass = "test-order-row";
+            else if(isCanceled) rowClass = "opacity-30";
+
+            tbody.innerHTML+=`
+                <tr class="hover:bg-slate-800/40 ${rowClass}">
+                    <td class="p-5 font-bold text-xs truncate max-w-[250px]">${isTest ? '[ТЕСТ] ' : ''}${item.productTitle}</td>
+                    <td class="p-5 text-[9px] uppercase font-black text-purple-400">${STATUS_RU[item.status]||item.status}</td>
+                    <td class="p-5 text-xs text-slate-500">${new Date(item.date).toLocaleDateString()}</td>
+                    <td class="p-5 text-xs font-mono font-bold">${(item.sellPrice||0).toLocaleString()}</td>
+                    <td class="p-5 text-xs font-bold text-orange-400">${(isTest || purchase === 0) ? '---' : purchase.toLocaleString()}</td>
+                    <td class="p-5 text-xs font-bold text-emerald-400">${isTest ? '---' : rowNet.toLocaleString()}</td>
+                </tr>`;
+            
+            if(!isCanceled && !isTest && purchase>0 && (rowNet/purchase*100) < 25) {
+                riskDiv.innerHTML += `<div class="bg-slate-900 p-4 rounded-2xl border-l-4 border-red-500 flex justify-between items-center text-[10px]">
+                    <span class="truncate pr-4">${item.productTitle}</span>
+                    <span class="text-red-400 font-black whitespace-nowrap">ROI ${(rowNet/purchase*100).toFixed(1)}%</span>
+                </div>`;
+            }
+        });
+
+        const buyoutPercent = stats.totalCount > 0 ? Math.round((stats.done / stats.totalCount) * 100) : 0;
+        const cancelPercent = stats.totalCount > 0 ? Math.round((stats.cancel / stats.totalCount) * 100) : 0;
+
+        document.getElementById('buyoutStats').innerText = `${stats.done} / ${buyoutPercent}%`;
+        document.getElementById('cancelStats').innerText = `${stats.cancel} / ${cancelPercent}%`;
+        document.getElementById('netProfit').innerText=stats.net.toLocaleString()+' сум';
+        document.getElementById('roi').innerText=(stats.cost>0?(stats.net/stats.cost*100):0).toFixed(1)+'%';
+        
+        updateChart(stats.labels, stats.values);
+        updateAI(stats);
+    }
+
+    function updateAI(stats){
+        const taskbar = document.getElementById('taskbar');
+        taskbar.innerHTML = '';
+        if (stats.cancel > (stats.done * 0.2)) addAiTask('⚠️ Высокий процент отмен! Проверь качество.', 'danger');
+        if (stats.net > 1000000) addAiTask('💰 Прибыль более 1 млн! Отличный результат.', 'success');
+        if (!taskbar.innerHTML) taskbar.innerHTML = '<p class="text-[10px] text-slate-500 italic">Анализирую данные...</p>';
+    }
+
+    function addAiTask(text,type){
+        const colors={'danger':'border-red-500 bg-red-500/10 text-red-200','success':'border-emerald-500 bg-emerald-500/10 text-emerald-200'};
+        document.getElementById('taskbar').innerHTML+=`<div class="ai-card p-3 rounded-xl border ${colors[type]} text-[10px] font-bold shadow-sm">${text}</div>`;
+    }
+
+    function updateChart(labels,data){
+        if(salesChart) salesChart.destroy();
+        salesChart=new Chart(document.getElementById('salesChart').getContext('2d'),{
+            type:'line',
+            data:{labels,datasets:[{data,borderColor:'#9333ea',borderWidth:3,pointRadius:0,fill:true,tension:0.4,backgroundColor:'rgba(147,51,234,0.1)'}]},
+            options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{display:false},x:{ticks:{color:'#475569',size:10}}}}
+        });
+    }
+
+    function openRoiModal(){ document.getElementById('roiModal').classList.remove('hidden'); switchTab('fbo'); }
+    function closeRoiModal(){ document.getElementById('roiModal').classList.add('hidden'); }
+
+    function switchTab(tab){
+        ['analytics','fbo','prices'].forEach(t=>{
+            document.getElementById(`tab-${t}`).classList.add('hidden');
+            document.getElementById(`tab-btn-${t}`).classList.remove('tab-active');
+        });
+        document.getElementById(`tab-${tab}`).classList.remove('hidden');
+        document.getElementById(`tab-btn-${tab}`).classList.add('tab-active');
+        if(tab==='fbo') fillFboSelect();
+        if(tab==='prices') renderManualPriceList();
+    }
+
+    function fillFboSelect(){
+        const select = document.getElementById('fboItemSelect');
+        const unique = [...new Set(currentOrders.map(o => o.productTitle))];
+        select.innerHTML = unique.map(t => {
+            const lastItem = currentOrders.find(o => o.productTitle === t);
+            const p = lastItem.sellPrice || 0;
+            return `<option value="${t}" data-price="${p}">${t} (${p.toLocaleString()} сум)</option>`;
+        }).join('');
+    }
+
+    function addToFboList(){
+        const select = document.getElementById('fboItemSelect');
+        const title = select.value;
+        if(!title) return;
+        const sellPrice = parseFloat(select.options[select.selectedIndex].dataset.price);
+        const qty = parseInt(document.getElementById('fboQuantity').value);
+        
+        const purchasePrice = getPurchasePrice(title);
+        const commission = sellPrice * 0.12; 
+        const logistics = 15000; 
+        const netPerUnit = (sellPrice - commission - logistics - purchasePrice);
+
+        fboList.push({
+            title, qty, sellPrice,
+            purchaseUZS: purchasePrice * qty, 
+            purchaseUSD: (purchasePrice * qty / usdRateValue).toFixed(2),
+            netUZS: netPerUnit * qty,
+            netUSD: (netPerUnit * qty / usdRateValue).toFixed(2)
+        });
+        renderFboTable();
+    }
+
+    function renderFboTable(){
+        const tbody = document.getElementById('fboTableBody'); tbody.innerHTML = '';
+        let tQty=0, tCost=0, tNet=0;
+        fboList.forEach((item, index) => {
+            tQty+=item.qty; tCost+=item.purchaseUZS; tNet+=item.netUZS;
+            tbody.innerHTML += `
+                <tr class="hover:bg-slate-800/40 border-b border-slate-800">
+                    <td class="p-5 font-bold text-slate-300 text-xs">${item.title}</td>
+                    <td class="p-5 text-center font-black">${item.qty} шт</td>
+                    <td class="p-5 font-mono text-slate-400">${item.sellPrice.toLocaleString()}</td>
+                    <td class="p-5 font-mono">
+                        <div class="text-orange-400 font-bold">${item.purchaseUZS.toLocaleString()}</div>
+                        <div class="text-purple-400 text-[10px]">$ ${item.purchaseUSD}</div>
+                    </td>
+                    <td class="p-5 font-mono">
+                        <div class="text-emerald-400 font-black">${item.netUZS.toLocaleString()}</div>
+                        <div class="text-purple-400 text-[10px] font-bold">$ ${item.netUSD}</div>
+                    </td>
+                    <td class="p-5 text-right"><button onclick="fboList.splice(${index},1);renderFboTable();" class="text-red-500 font-black">✕</button></td>
+                </tr>`;
+        });
+        document.getElementById('fboTotalQty').innerText = tQty + ' шт';
+        document.getElementById('fboTotalCost').innerText = tCost.toLocaleString() + ' сум';
+        document.getElementById('fboTotalNet').innerText = tNet.toLocaleString() + ' сум';
+    }
+
+    window.onload = fetchFullData;
+</script>
+</body>
+</html>

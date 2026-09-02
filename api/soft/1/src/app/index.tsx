@@ -11,9 +11,10 @@ import {
   Platform,
   StatusBar,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
+import Svg, { Path, Defs, LinearGradient, Stop, SvgXml } from 'react-native-svg';
 
 const { width } = Dimensions.get('window');
 
@@ -96,6 +97,12 @@ export default function HomeScreen() {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isShopPickerVisible, setIsShopPickerVisible] = useState(false);
   
+  // Сканер и Этикетки
+  const [isScannerVisible, setIsScannerVisible] = useState(false);
+  const [scannedOrderId, setScannedOrderId] = useState('');
+  const [loadingLabel, setLoadingLabel] = useState(false);
+  const [svgLabelData, setSvgLabelData] = useState<string | null>(null);
+
   const [newPriceKey, setNewPriceKey] = useState('');
   const [newPriceValue, setNewPriceValue] = useState('');
   const [searchPriceQuery, setSearchPriceQuery] = useState('');
@@ -125,6 +132,43 @@ export default function HomeScreen() {
     return null;
   };
 
+  // ФУНКЦИЯ ПОЛУЧЕНИЯ ЭТИКЕТКИ SVG
+  const fetchOrderLabel = async (orderId: string) => {
+    if (!orderId.trim()) {
+      Alert.alert('Ошибка', 'Введите или отсканируйте корректный ID заказа');
+      return;
+    }
+
+    setLoadingLabel(true);
+    setSvgLabelData(null);
+    const path = `/fbs/order/${orderId.trim()}/labels/print?size=LARGE`;
+    const url = getEndpointUrl(path);
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': TOKEN,
+          'Accept': 'image/svg+xml, application/json, text/plain, */*',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ошибка ${response.status}`);
+      }
+
+      const svgText = await response.text();
+      if (svgText.includes('<svg')) {
+        setSvgLabelData(svgText);
+      } else {
+        Alert.alert('Ошибка', 'Этикетка не найдена или неверный формат ответа');
+      }
+    } catch (e: any) {
+      Alert.alert('Ошибка получения этикетки', e.message || 'Не удалось загрузить SVG');
+    } finally {
+      setLoadingLabel(false);
+    }
+  };
+
   const getPurchasePrice = useCallback((item: any) => {
     const title = (item.productTitle || item.skuTitle || item.title || '').toLowerCase();
     for (let k in manualPrices) {
@@ -133,7 +177,6 @@ export default function HomeScreen() {
     return 0;
   }, [manualPrices]);
 
-  // ПРОВЕРКА НА ТЕСТОВЫЙ ЗАКАЗ (с исключением всех рабочих статусов)
   const isTestOrder = useCallback((item: any) => {
     const statusKey = (item.status || '').toUpperCase();
     const isCanceled = statusKey === 'CANCELED' || statusKey === 'CANCELLED' || statusKey === 'RETURNED';
@@ -270,8 +313,10 @@ export default function HomeScreen() {
     setTotalCost(Math.round(tCost).toLocaleString());
     setNetProfit(Math.round(tNet).toLocaleString());
     setCanceledCount(cancelCount);
-    setRoi(tCost > 0 ? ((tNet / tCost) * 100).toFixed(1) + '%' : '0%');
+    roiSetter(tCost > 0 ? ((tNet / tCost) * 100).toFixed(1) + '%' : '0%');
   }, [getPurchasePrice, isTestOrder]);
+
+  const roiSetter = (val: string) => setRoi(val);
 
   useEffect(() => {
     const now = new Date();
@@ -424,10 +469,13 @@ export default function HomeScreen() {
             </Svg>
           </View>
 
+          {/* Внедрена кнопка «Сканер» вместо «Обновить» */}
           <View style={styles.actionGrid}>
-            <TouchableOpacity style={styles.actionBtn} onPress={fetchFullData}>
-              <View style={styles.actionIconBg}><Text style={styles.actionIcon}>↓</Text></View>
-              <Text style={styles.actionLabel}>Обновить</Text>
+            <TouchableOpacity style={styles.actionBtn} onPress={() => setIsScannerVisible(true)}>
+              <View style={[styles.actionIconBg, { backgroundColor: 'rgba(168, 85, 247, 0.15)' }]}>
+                <Text style={[styles.actionIcon, { color: '#A855F7' }]}>📷</Text>
+              </View>
+              <Text style={[styles.actionLabel, { color: '#A855F7', fontWeight: '700' }]}>Сканер</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.actionBtn} onPress={() => setIsShopPickerVisible(true)}>
@@ -548,8 +596,6 @@ export default function HomeScreen() {
                     return 'В пути';
                   case 'AWAITING_SHIPMENT':
                     return 'Ожидает сборки';
-                  case 'PROCESSING':
-                    return 'В обработке';
                   case 'PENDING':
                     return 'Ожидает';
                   default:
@@ -591,6 +637,73 @@ export default function HomeScreen() {
         </View>
 
       </ScrollView>
+
+      {/* МОДАЛЬНОЕ ОКНО СКУНЕРА QR И ПЕЧАТИ ЭТИКЕТКИ LARGE (58x40mm) */}
+      <Modal visible={isScannerVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '90%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Сканер QR / Печать этикетки (58x40)</Text>
+              <TouchableOpacity onPress={() => {
+                setIsScannerVisible(false);
+                setSvgLabelData(null);
+                setScannedOrderId('');
+              }}>
+                <Text style={{ color: '#94a3b8', fontSize: 18 }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ gap: 12 }}>
+              <Text style={styles.modalSubTitle}>Отсканируйте QR или введите Order ID:</Text>
+              
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TextInput
+                  placeholder="ID Заказа (orderId)"
+                  placeholderTextColor="#64748b"
+                  style={[styles.input, { flex: 1 }]}
+                  value={scannedOrderId}
+                  onChangeText={setScannedOrderId}
+                  keyboardType="numeric"
+                />
+                <TouchableOpacity
+                  style={[styles.modalSaveBtn, { backgroundColor: '#A855F7', justifyContent: 'center' }]}
+                  onPress={() => fetchOrderLabel(scannedOrderId)}
+                  disabled={loadingLabel}
+                >
+                  {loadingLabel ? (
+                    <ActivityIndicator color="#FFF" size="small" />
+                  ) : (
+                    <Text style={styles.btnTextSave}>Печать SVG</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* ОБЛАСТЬ ПРЕВЬЮ ЭТИКЕТКИ (58x40mm) */}
+              <View style={styles.labelPreviewContainer}>
+                {loadingLabel ? (
+                  <View style={{ alignItems: 'center', gap: 8 }}>
+                    <ActivityIndicator color="#A855F7" size="large" />
+                    <Text style={{ color: '#94A3B8', fontSize: 12 }}>Загрузка этикетки FBS...</Text>
+                  </View>
+                ) : svgLabelData ? (
+                  <ScrollView contentContainerStyle={styles.svgWrapper} horizontal>
+                    <View style={styles.labelPaper}>
+                      <SvgXml xml={svgLabelData} width="100%" height="100%" />
+                    </View>
+                  </ScrollView>
+                ) : (
+                  <View style={{ alignItems: 'center', gap: 6 }}>
+                    <Text style={{ fontSize: 28 }}>🖨️</Text>
+                    <Text style={{ color: '#64748b', fontSize: 12, textAlign: 'center' }}>
+                      Введите ID заказа выше для получения SVG этикетки 58x40mm (LARGE)
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* МОДАЛКА ВЫБОРА МАГАЗИНА */}
       <Modal visible={isShopPickerVisible} animationType="fade" transparent>
@@ -855,4 +968,20 @@ const styles = StyleSheet.create({
   },
   usdRateText: { color: '#38BDF8', fontSize: 11, fontWeight: '600' },
   usdRateValue: { color: '#FFF', fontSize: 12, fontWeight: '800' },
+  
+  // СТИЛИ ЭТИКЕТКИ 58x40
+  labelPreviewContainer: {
+    backgroundColor: '#050811', borderRadius: 16, minHeight: 220,
+    justifyContent: 'center', alignItems: 'center', padding: 12,
+    borderWidth: 1, borderColor: '#1E293B', marginTop: 6,
+  },
+  svgWrapper: { justifyContent: 'center', alignItems: 'center' },
+  labelPaper: {
+    width: 232, // Соответствует пропорции 58x40mm в px
+    height: 160,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    overflow: 'hidden',
+    padding: 4,
+  },
 });

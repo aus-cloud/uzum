@@ -11,9 +11,12 @@ import {
   Platform,
   StatusBar,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Buffer } from 'buffer';
 
 const { width } = Dimensions.get('window');
 
@@ -78,10 +81,10 @@ export default function HomeScreen() {
   const [shops, setShops] = useState<Shop[]>([]);
   const [selectedShopId, setSelectedShopId] = useState<string>('ALL');
   const [updateStatus, setUpdateStatus] = useState('Синхронизация...');
-  
+
   const [rawOrders, setRawOrders] = useState<any[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<any[]>([]);
-  
+
   const [totalCost, setTotalCost] = useState('0');
   const [netProfit, setNetProfit] = useState('0');
   const [roi, setRoi] = useState('0%');
@@ -95,15 +98,25 @@ export default function HomeScreen() {
 
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isShopPickerVisible, setIsShopPickerVisible] = useState(false);
-  
+
   const [newPriceKey, setNewPriceKey] = useState('');
   const [newPriceValue, setNewPriceValue] = useState('');
   const [searchPriceQuery, setSearchPriceQuery] = useState('');
 
+  // --- СОСТОЯНИЯ ДЛЯ СКАНЕРА И ЭТИКЕТОК ---
+  const [isScannerVisible, setIsScannerVisible] = useState(false);
+  const [manualOrderId, setManualOrderId] = useState('');
+  const [scannedOrderId, setScannedOrderId] = useState<string | null>(null);
+  const [scanningLoading, setScanningLoading] = useState(false);
+  const [scannedPdfUri, setScannedPdfUri] = useState<string | null>(null);
+  const [scannedOrderData, setScannedOrderData] = useState<any | null>(null);
+  const [permission, requestPermission] = useCameraPermissions();
+  const [scannedSuccess, setScannedSuccess] = useState(false);
+
   useEffect(() => {
     fetch('https://cbu.uz/ru/arkhiv-kursov-valyut/json/')
-      .then(res => res.json())
-      .then(data => {
+      .then((res) => res.json())
+      .then((data) => {
         const usd = data.find((item: any) => item.Ccy === 'USD');
         if (usd && usd.Rate) setUsdRate(parseFloat(usd.Rate));
       })
@@ -125,55 +138,60 @@ export default function HomeScreen() {
     return null;
   };
 
-  const getPurchasePrice = useCallback((item: any) => {
-    const title = (item.productTitle || item.skuTitle || item.title || '').toLowerCase();
-    for (let k in manualPrices) {
-      if (title.includes(k.toLowerCase())) return manualPrices[k];
-    }
-    return 0;
-  }, [manualPrices]);
+  const getPurchasePrice = useCallback(
+    (item: any) => {
+      const title = (item.productTitle || item.skuTitle || item.title || '').toLowerCase();
+      for (let k in manualPrices) {
+        if (title.includes(k.toLowerCase())) return manualPrices[k];
+      }
+      return 0;
+    },
+    [manualPrices]
+  );
 
-  // ПРОВЕРКА НА ТЕСТОВЫЙ ЗАКАЗ (с исключением всех рабочих статусов)
-  const isTestOrder = useCallback((item: any) => {
-    const statusKey = (item.status || '').toUpperCase();
-    const isCanceled = statusKey === 'CANCELED' || statusKey === 'CANCELLED' || statusKey === 'RETURNED';
-    
-    if (isCanceled) return false;
+  const isTestOrder = useCallback(
+    (item: any) => {
+      const statusKey = (item.status || '').toUpperCase();
+      const isCanceled = statusKey === 'CANCELED' || statusKey === 'CANCELLED' || statusKey === 'RETURNED';
 
-    const isPendingDelivery = [
-      'PROCESSING',
-      'PENDING',
-      'AWAITING_SHIPMENT',
-      'DELIVERING',
-      'DELIVERED_TO_CUSTOMER_DELIVERY_POINT',
-      'DELIVERED',
-      'COMPLETED',
-      'PAID',
-      'TO_WITHDRAW',
-      'WITHDRAWN'
-    ].includes(statusKey);
+      if (isCanceled) return false;
 
-    if (isPendingDelivery) return false;
+      const isPendingDelivery = [
+        'PROCESSING',
+        'PENDING',
+        'AWAITING_SHIPMENT',
+        'DELIVERING',
+        'DELIVERED_TO_CUSTOMER_DELIVERY_POINT',
+        'DELIVERED',
+        'COMPLETED',
+        'PAID',
+        'TO_WITHDRAW',
+        'WITHDRAWN',
+      ].includes(statusKey);
 
-    const sellPrice = Number(item.sellerProfit || item.amount || item.price || 0);
-    const buyPrice = getPurchasePrice(item);
+      if (isPendingDelivery) return false;
 
-    if (sellPrice < 50000) return true;
-    if (buyPrice > 1000000 && sellPrice >= 10000 && sellPrice <= 100000) return true;
+      const sellPrice = Number(item.sellerProfit || item.amount || item.price || 0);
+      const buyPrice = getPurchasePrice(item);
 
-    return false;
-  }, [getPurchasePrice]);
+      if (sellPrice < 50000) return true;
+      if (buyPrice > 1000000 && sellPrice >= 10000 && sellPrice <= 100000) return true;
+
+      return false;
+    },
+    [getPurchasePrice]
+  );
 
   const fetchFullData = async () => {
     setLoading(true);
     setUpdateStatus('Загрузка...');
-    const headers = { 'Authorization': TOKEN, 'Accept': '*/*' };
+    const headers = { Authorization: TOKEN, Accept: '*/*' };
 
     try {
       const shopsUrl = getEndpointUrl('/shops');
-      const shopsRaw = await fetch(shopsUrl, { headers }).then(r => r.text());
+      const shopsRaw = await fetch(shopsUrl, { headers }).then((r) => r.text());
       const shopsData = safeJsonParse(shopsRaw);
-      
+
       let fetchedShops: Shop[] = [];
       if (shopsData && Array.isArray(shopsData) && shopsData.length > 0) {
         fetchedShops = shopsData.map((s: any) => ({
@@ -183,16 +201,14 @@ export default function HomeScreen() {
       }
       setShops(fetchedShops);
 
-      const shopIdsParam = selectedShopId === 'ALL' 
-        ? fetchedShops.map(s => s.id).join(',') 
-        : selectedShopId;
+      const shopIdsParam = selectedShopId === 'ALL' ? fetchedShops.map((s) => s.id).join(',') : selectedShopId;
 
       const financeUrl = getEndpointUrl(`/finance/orders?page=0&size=100${shopIdsParam ? `&shopIds=${shopIdsParam}` : ''}`);
       const oResRaw = await fetch(financeUrl, { headers });
       const oResText = await oResRaw.text();
       const oRes = safeJsonParse(oResText) || {};
       const orders = oRes.orderItems || oRes.orders || oRes.data || [];
-      
+
       setRawOrders(orders);
       setUpdateStatus('Обновлено ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     } catch (e) {
@@ -202,76 +218,137 @@ export default function HomeScreen() {
     }
   };
 
-  const generateLineChartData = useCallback((orders: any[]) => {
-    const daysMap: { [key: string]: { totalSales: number; dayName: string } } = {};
-    const days: string[] = [];
+  // --- ОБРАБОТКА И ПОЛУЧЕНИЕ ЭТИКЕТКИ ДЛЯ СКАНИРОВАННОГО ЗАКАЗА ---
+  const handleFetchOrderAndLabel = async (orderId: string) => {
+    if (!orderId) return;
+    setScanningLoading(true);
+    setScannedOrderId(orderId);
 
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const key = d.toISOString().split('T')[0];
-      const dayName = d.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric' });
-      daysMap[key] = { totalSales: 0, dayName };
-      days.push(key);
+    // Находим информацию о заказе локально
+    const localFound = rawOrders.find((o) => String(o.orderId || o.id) === String(orderId));
+    setScannedOrderData(localFound || null);
+
+    try {
+      const headers = { Authorization: TOKEN, Accept: '*/*' };
+      const labelUrl = getEndpointUrl(`/fbs/order/${orderId}/labels/print?labelSize=LARGE`);
+
+      const res = await fetch(labelUrl, { headers });
+      const responseText = await res.text();
+
+      // Очищаем полученную строку от пробелов или кавычек
+      const base64Clean = responseText.replace(/^"|"$/g, '').trim();
+
+      if (base64Clean && base64Clean.length > 50) {
+        let pdfDataUrl = `data:application/pdf;base64,${base64Clean}`;
+        setScannedPdfUri(pdfDataUrl);
+
+        if (Platform.OS === 'web') {
+          // Для веба - открываем PDF в новой вкладке для моментальной печати
+          const byteCharacters = atob(base64Clean);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: 'application/pdf' });
+          const fileURL = URL.createObjectURL(blob);
+          window.open(fileURL, '_blank');
+        }
+      } else {
+        Alert.alert('Ошибка', 'Не удалось загрузить этикетку заказа');
+      }
+    } catch (err) {
+      Alert.alert('Ошибка', 'Ошибка при получении данных с сервера');
+    } finally {
+      setScanningLoading(false);
     }
+  };
 
-    orders.forEach((i) => {
-      const statusKey = (i.status || '').toUpperCase();
-      const isCanceled = statusKey === 'CANCELED' || statusKey === 'CANCELLED' || statusKey === 'RETURNED';
-      
-      if (isTestOrder(i) || isCanceled) return;
+  const handleBarCodeScanned = ({ data }: { data: string }) => {
+    if (scannedSuccess || scanningLoading) return;
+    setScannedSuccess(true);
+    const extractedId = data.trim();
+    handleFetchOrderAndLabel(extractedId);
+  };
 
-      const rawDate = i.date || i.createdDate || i.createdAt || i.orderDate;
-      if (rawDate) {
-        const itemDateObj = new Date(rawDate);
-        if (!isNaN(itemDateObj.getTime())) {
-          const itemDateStr = itemDateObj.toISOString().split('T')[0];
-          if (daysMap[itemDateStr]) {
-            const buy = getPurchasePrice(i);
-            const profit = Number(i.sellerProfit || i.amount || i.price || 0);
-            const net = profit - buy;
-            daysMap[itemDateStr].totalSales += net > 0 ? net : profit;
+  const generateLineChartData = useCallback(
+    (orders: any[]) => {
+      const daysMap: { [key: string]: { totalSales: number; dayName: string } } = {};
+      const days: string[] = [];
+
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const key = d.toISOString().split('T')[0];
+        const dayName = d.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric' });
+        daysMap[key] = { totalSales: 0, dayName };
+        days.push(key);
+      }
+
+      orders.forEach((i) => {
+        const statusKey = (i.status || '').toUpperCase();
+        const isCanceled = statusKey === 'CANCELED' || statusKey === 'CANCELLED' || statusKey === 'RETURNED';
+
+        if (isTestOrder(i) || isCanceled) return;
+
+        const rawDate = i.date || i.createdDate || i.createdAt || i.orderDate;
+        if (rawDate) {
+          const itemDateObj = new Date(rawDate);
+          if (!isNaN(itemDateObj.getTime())) {
+            const itemDateStr = itemDateObj.toISOString().split('T')[0];
+            if (daysMap[itemDateStr]) {
+              const buy = getPurchasePrice(i);
+              const profit = Number(i.sellerProfit || i.amount || i.price || 0);
+              const net = profit - buy;
+              daysMap[itemDateStr].totalSales += net > 0 ? net : profit;
+            }
           }
         }
-      }
-    });
+      });
 
-    setDailyStats(days.map((key) => ({
-      dateStr: key,
-      dayName: daysMap[key].dayName,
-      totalSales: Math.round(daysMap[key].totalSales),
-    })));
-  }, [getPurchasePrice, isTestOrder]);
+      setDailyStats(
+        days.map((key) => ({
+          dateStr: key,
+          dayName: daysMap[key].dayName,
+          totalSales: Math.round(daysMap[key].totalSales),
+        }))
+      );
+    },
+    [getPurchasePrice, isTestOrder]
+  );
 
-  const calculateMetrics = useCallback((items: any[]) => {
-    let tCost = 0;
-    let tNet = 0;
-    let cancelCount = 0;
+  const calculateMetrics = useCallback(
+    (items: any[]) => {
+      let tCost = 0;
+      let tNet = 0;
+      let cancelCount = 0;
 
-    items.forEach((i) => {
-      const statusKey = (i.status || '').toUpperCase();
-      const isCanceled = statusKey === 'CANCELED' || statusKey === 'CANCELLED' || statusKey === 'RETURNED';
+      items.forEach((i) => {
+        const statusKey = (i.status || '').toUpperCase();
+        const isCanceled = statusKey === 'CANCELED' || statusKey === 'CANCELLED' || statusKey === 'RETURNED';
 
-      if (isCanceled) {
-        cancelCount += 1;
-        return;
-      }
+        if (isCanceled) {
+          cancelCount += 1;
+          return;
+        }
 
-      if (isTestOrder(i)) return;
+        if (isTestOrder(i)) return;
 
-      const buy = getPurchasePrice(i);
-      const profit = Number(i.sellerProfit || i.amount || 0);
-      const net = profit - buy;
+        const buy = getPurchasePrice(i);
+        const profit = Number(i.sellerProfit || i.amount || 0);
+        const net = profit - buy;
 
-      tCost += buy;
-      tNet += net;
-    });
+        tCost += buy;
+        tNet += net;
+      });
 
-    setTotalCost(Math.round(tCost).toLocaleString());
-    setNetProfit(Math.round(tNet).toLocaleString());
-    setCanceledCount(cancelCount);
-    setRoi(tCost > 0 ? ((tNet / tCost) * 100).toFixed(1) + '%' : '0%');
-  }, [getPurchasePrice, isTestOrder]);
+      setTotalCost(Math.round(tCost).toLocaleString());
+      setNetProfit(Math.round(tNet).toLocaleString());
+      setCanceledCount(cancelCount);
+      setRoi(tCost > 0 ? ((tNet / tCost) * 100).toFixed(1) + '%' : '0%');
+    },
+    [getPurchasePrice, isTestOrder]
+  );
 
   useEffect(() => {
     const now = new Date();
@@ -311,14 +388,14 @@ export default function HomeScreen() {
 
   const getSelectedShopTitle = () => {
     if (selectedShopId === 'ALL') return 'Все магазины';
-    const found = shops.find(s => s.id === selectedShopId);
+    const found = shops.find((s) => s.id === selectedShopId);
     return found ? found.title : `Магазин #${selectedShopId}`;
   };
 
   const filteredPricesList = useMemo(() => {
     return Object.keys(manualPrices)
-      .filter(key => key.toLowerCase().includes(searchPriceQuery.toLowerCase()))
-      .map(key => ({
+      .filter((key) => key.toLowerCase().includes(searchPriceQuery.toLowerCase()))
+      .map((key) => ({
         name: key,
         sum: manualPrices[key],
         usd: (manualPrices[key] / usdRate).toFixed(2),
@@ -369,11 +446,7 @@ export default function HomeScreen() {
           <Text style={styles.avatarText}>U</Text>
         </View>
 
-        <TouchableOpacity 
-          style={styles.shopSelectorBtn} 
-          onPress={() => setIsShopPickerVisible(true)}
-          activeOpacity={0.7}
-        >
+        <TouchableOpacity style={styles.shopSelectorBtn} onPress={() => setIsShopPickerVisible(true)} activeOpacity={0.7}>
           <View style={{ alignItems: 'center' }}>
             <Text style={styles.statusHeader}>{updateStatus}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
@@ -384,16 +457,11 @@ export default function HomeScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.iconBtn} onPress={fetchFullData} disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="#A855F7" size="small" />
-          ) : (
-            <Text style={{ color: '#FFF', fontSize: 16 }}>↻</Text>
-          )}
+          {loading ? <ActivityIndicator color="#A855F7" size="small" /> : <Text style={{ color: '#FFF', fontSize: 16 }}>↻</Text>}
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-        
         {/* КАРТОЧКА ГРАФИКА */}
         <View style={styles.heroCard}>
           <View style={styles.heroTopRow}>
@@ -425,18 +493,34 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.actionGrid}>
-            <TouchableOpacity style={styles.actionBtn} onPress={fetchFullData}>
-              <View style={styles.actionIconBg}><Text style={styles.actionIcon}>↓</Text></View>
-              <Text style={styles.actionLabel}>Обновить</Text>
+            {/* КНОПКА СКАНИРОВАНИЯ ВМЕСТО КНОПКИ ОБНОВИТЬ */}
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => {
+                setScannedSuccess(false);
+                setScannedPdfUri(null);
+                setScannedOrderId(null);
+                setScannedOrderData(null);
+                setIsScannerVisible(true);
+              }}
+            >
+              <View style={[styles.actionIconBg, { backgroundColor: 'rgba(168, 85, 247, 0.2)' }]}>
+                <Text style={[styles.actionIcon, { color: '#A855F7' }]}>📷</Text>
+              </View>
+              <Text style={[styles.actionLabel, { color: '#C084FC', fontWeight: 'bold' }]}>Сканер</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.actionBtn} onPress={() => setIsShopPickerVisible(true)}>
-              <View style={styles.actionIconBg}><Text style={styles.actionIcon}>🛍</Text></View>
+              <View style={styles.actionIconBg}>
+                <Text style={styles.actionIcon}>🛍</Text>
+              </View>
               <Text style={styles.actionLabel}>Магазины</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.actionBtn} onPress={() => setIsModalVisible(true)}>
-              <View style={styles.actionIconBg}><Text style={styles.actionIcon}>⚙</Text></View>
+              <View style={styles.actionIconBg}>
+                <Text style={styles.actionIcon}>⚙</Text>
+              </View>
               <Text style={styles.actionLabel}>Закупы</Text>
             </TouchableOpacity>
           </View>
@@ -461,9 +545,7 @@ export default function HomeScreen() {
               style={[styles.filterChip, timePeriod === p.id && styles.filterChipActive]}
               onPress={() => setTimePeriod(p.id as any)}
             >
-              <Text style={[styles.filterChipText, timePeriod === p.id && styles.filterChipTextActive]}>
-                {p.label}
-              </Text>
+              <Text style={[styles.filterChipText, timePeriod === p.id && styles.filterChipTextActive]}>{p.label}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -548,8 +630,6 @@ export default function HomeScreen() {
                     return 'В пути';
                   case 'AWAITING_SHIPMENT':
                     return 'Ожидает сборки';
-                  case 'PROCESSING':
-                    return 'В обработке';
                   case 'PENDING':
                     return 'Ожидает';
                   default:
@@ -565,7 +645,7 @@ export default function HomeScreen() {
                         {displayTitle.substring(0, 2).toUpperCase()}
                       </Text>
                     </View>
-                    
+
                     <View style={styles.titleWrapper}>
                       <Text style={styles.cryptoName} numberOfLines={2}>
                         {displayTitle}
@@ -577,7 +657,14 @@ export default function HomeScreen() {
                   </View>
 
                   <View style={styles.cryptoRight}>
-                    <Text style={[styles.cryptoPrice, (isCanceled || isTest || sellPrice === 0) && { color: isCanceled ? '#EF4444' : sellPrice === 0 ? statusInfo.color : '#64748B' }]}>
+                    <Text
+                      style={[
+                        styles.cryptoPrice,
+                        (isCanceled || isTest || sellPrice === 0) && {
+                          color: isCanceled ? '#EF4444' : sellPrice === 0 ? statusInfo.color : '#64748B',
+                        },
+                      ]}
+                    >
                       {renderPriceText()}
                     </Text>
                     {buy > 0 && !isTest && !isCanceled && (
@@ -589,16 +676,144 @@ export default function HomeScreen() {
             })
           )}
         </View>
-
       </ScrollView>
+
+      {/* МОДАЛКА СКАНЕРА КОРДОВ / ВВОДА ORDER ID */}
+      <Modal visible={isScannerVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '90%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Сканер QR / Ручной ввод</Text>
+              <TouchableOpacity onPress={() => setIsScannerVisible(false)}>
+                <Text style={{ color: '#94a3b8', fontSize: 18 }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* БЛОК КАМЕРЫ */}
+              <View style={styles.cameraBox}>
+                {!permission ? (
+                  <View style={styles.cameraCenter}>
+                    <Text style={{ color: '#94A3B8', fontSize: 12 }}>Запрос разрешения...</Text>
+                  </View>
+                ) : !permission.granted ? (
+                  <View style={styles.cameraCenter}>
+                    <Text style={{ color: '#FFF', fontSize: 12, textAlign: 'center', marginBottom: 10 }}>
+                      Нужен доступ к камере
+                    </Text>
+                    <TouchableOpacity style={styles.permBtn} onPress={requestPermission}>
+                      <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Разрешить</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <CameraView
+                    style={StyleSheet.absoluteFillObject}
+                    facing="back"
+                    onBarcodeScanned={scannedSuccess ? undefined : handleBarCodeScanned}
+                  />
+                )}
+              </View>
+
+              {/* РУЧНОЙ ВВОД */}
+              <View style={{ marginTop: 15 }}>
+                <Text style={styles.modalSubTitle}>Ввести Order ID вручную:</Text>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                  <TextInput
+                    placeholder="Например: 12345678"
+                    placeholderTextColor="#64748b"
+                    keyboardType="numeric"
+                    style={[styles.input, { flex: 1 }]}
+                    value={manualOrderId}
+                    onChangeText={setManualOrderId}
+                  />
+                  <TouchableOpacity
+                    style={[styles.modalSaveBtn, { backgroundColor: '#A855F7', justifyContent: 'center' }]}
+                    onPress={() => {
+                      if (manualOrderId.trim()) {
+                        handleFetchOrderAndLabel(manualOrderId.trim());
+                      }
+                    }}
+                  >
+                    <Text style={styles.btnTextSave}>Поиск</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* ИНДИКАТОР ЗАГРУЗКИ */}
+              {scanningLoading && (
+                <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                  <ActivityIndicator color="#A855F7" size="large" />
+                  <Text style={{ color: '#94A3B8', marginTop: 8 }}>Загрузка этикетки...</Text>
+                </View>
+              )}
+
+              {/* РЕЗУЛЬТАТ СКАНИРОВАНИЯ */}
+              {scannedOrderId && !scanningLoading && (
+                <View style={styles.resultCard}>
+                  <Text style={{ color: '#00E599', fontWeight: 'bold', fontSize: 14 }}>
+                    Заказ #{scannedOrderId}
+                  </Text>
+
+                  {scannedOrderData ? (
+                    <View style={{ marginTop: 6 }}>
+                      <Text style={{ color: '#FFF', fontSize: 13, fontWeight: '600' }}>
+                        {scannedOrderData.productTitle || scannedOrderData.title || 'Товар найден в базе'}
+                      </Text>
+                      <Text style={{ color: '#94A3B8', fontSize: 12, marginTop: 2 }}>
+                        Статус:{' '}
+                        {STATUS_TRANSLATIONS[scannedOrderData.status]?.label || scannedOrderData.status}
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text style={{ color: '#94A3B8', fontSize: 12, marginTop: 4 }}>
+                      Информация о товаре отсутствует в текущем списке
+                    </Text>
+                  )}
+
+                  {scannedPdfUri && (
+                    <View style={{ marginTop: 12, alignItems: 'center' }}>
+                      <Text style={{ color: '#38BDF8', fontSize: 12, marginBottom: 8, textAlign: 'center' }}>
+                        Этикетка LARGE (58x40mm) успешно сформирована!
+                      </Text>
+                      <TouchableOpacity
+                        style={[styles.modalSaveBtn, { backgroundColor: '#00E599', width: '100%' }]}
+                        onPress={() => {
+                          if (Platform.OS === 'web') {
+                            window.open(scannedPdfUri, '_blank');
+                          } else {
+                            Alert.alert('Печать', 'PDF файл готов для отправки на принтер!');
+                          }
+                        }}
+                      >
+                        <Text style={[styles.btnTextSave, { color: '#000' }]}>Открыть / Печать PDF</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  <TouchableOpacity
+                    style={{ marginTop: 12, alignSelf: 'center' }}
+                    onPress={() => {
+                      setScannedSuccess(false);
+                      setScannedPdfUri(null);
+                      setScannedOrderId(null);
+                      setScannedOrderData(null);
+                      setManualOrderId('');
+                    }}
+                  >
+                    <Text style={{ color: '#A855F7', fontSize: 12, textDecorationLine: 'underline' }}>
+                      Сканировать другой заказ
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* МОДАЛКА ВЫБОРА МАГАЗИНА */}
       <Modal visible={isShopPickerVisible} animationType="fade" transparent>
-        <TouchableOpacity 
-          style={styles.modalOverlay} 
-          activeOpacity={1} 
-          onPress={() => setIsShopPickerVisible(false)}
-        >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsShopPickerVisible(false)}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Выберите магазин</Text>
@@ -609,10 +824,7 @@ export default function HomeScreen() {
 
             <ScrollView style={{ maxHeight: 300 }}>
               <TouchableOpacity
-                style={[
-                  styles.shopSelectItem,
-                  selectedShopId === 'ALL' && styles.shopSelectItemActive,
-                ]}
+                style={[styles.shopSelectItem, selectedShopId === 'ALL' && styles.shopSelectItemActive]}
                 onPress={() => {
                   setSelectedShopId('ALL');
                   setIsShopPickerVisible(false);
@@ -626,10 +838,7 @@ export default function HomeScreen() {
               {shops.map((shop) => (
                 <TouchableOpacity
                   key={shop.id}
-                  style={[
-                    styles.shopSelectItem,
-                    selectedShopId === shop.id && styles.shopSelectItemActive,
-                  ]}
+                  style={[styles.shopSelectItem, selectedShopId === shop.id && styles.shopSelectItemActive]}
                   onPress={() => {
                     setSelectedShopId(shop.id);
                     setIsShopPickerVisible(false);
@@ -719,12 +928,10 @@ export default function HomeScreen() {
                 <Text style={styles.usdRateText}>Курс ЦБ РУз (USD):</Text>
                 <Text style={styles.usdRateValue}>{usdRate.toLocaleString()} сум / 1$</Text>
               </View>
-
             </View>
           </View>
         </View>
       </Modal>
-
     </SafeAreaView>
   );
 }
@@ -732,57 +939,103 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safeContainer: { flex: 1, backgroundColor: '#050811' },
   glowShape1: {
-    position: 'absolute', top: -40, right: -50, width: 220, height: 220, borderRadius: 110,
+    position: 'absolute',
+    top: -40,
+    right: -50,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
     backgroundColor: 'rgba(168, 85, 247, 0.15)',
   },
   glowShape2: {
-    position: 'absolute', top: 180, left: -80, width: 260, height: 260, borderRadius: 130,
+    position: 'absolute',
+    top: 180,
+    left: -80,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
     backgroundColor: 'rgba(56, 189, 248, 0.08)',
   },
   topHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
   },
   userAvatar: {
-    width: 38, height: 38, borderRadius: 19, backgroundColor: '#1E293B',
-    borderWidth: 1, borderColor: '#334155', justifyContent: 'center', alignItems: 'center',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#334155',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   avatarText: { color: '#A855F7', fontWeight: 'bold', fontSize: 16 },
   statusHeader: { color: '#64748B', fontSize: 11, fontWeight: '500' },
   shopSelectorBtn: {
-    backgroundColor: 'rgba(255, 255, 255, 0.04)', paddingHorizontal: 12, paddingVertical: 4,
-    borderRadius: 16, borderWidth: 1, borderColor: 'rgba(168, 85, 247, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.2)',
   },
   shopSelectorText: { color: '#A855F7', fontSize: 13, fontWeight: '700' },
   dropdownArrow: { color: '#A855F7', fontSize: 12 },
   iconBtn: {
-    width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    justifyContent: 'center', alignItems: 'center',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   container: { flex: 1, paddingHorizontal: 16 },
   heroCard: {
-    backgroundColor: 'rgba(13, 19, 34, 0.85)', borderRadius: 24, padding: 18, marginTop: 10,
-    borderWidth: 1, borderColor: 'rgba(168, 85, 247, 0.25)', shadowColor: '#A855F7',
-    shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 16,
+    backgroundColor: 'rgba(13, 19, 34, 0.85)',
+    borderRadius: 24,
+    padding: 18,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.25)',
+    shadowColor: '#A855F7',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
   },
   heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   shopBadge: { flexDirection: 'row', alignItems: 'center' },
   heroLabel: { color: '#94A3B8', fontSize: 13, fontWeight: '500' },
   shopIdText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
   badgeProfit: {
-    backgroundColor: 'rgba(168, 85, 247, 0.15)', paddingHorizontal: 10, paddingVertical: 4,
-    borderRadius: 12, borderWidth: 1, borderColor: 'rgba(168, 85, 247, 0.3)',
+    backgroundColor: 'rgba(168, 85, 247, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.3)',
   },
   badgeProfitText: { color: '#C084FC', fontSize: 11, fontWeight: '700' },
   chartHeaderTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '800', marginTop: 12, marginBottom: 8 },
   svgChartContainer: {
-    height: 110, marginVertical: 6, justifyContent: 'center', alignItems: 'center',
+    height: 110,
+    marginVertical: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   actionGrid: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 14 },
   actionBtn: { alignItems: 'center' },
   actionIconBg: {
-    width: 42, height: 42, borderRadius: 14, backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    justifyContent: 'center', alignItems: 'center', marginBottom: 4,
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
   },
   actionIcon: { color: '#94A3B8', fontSize: 16, fontWeight: 'bold' },
   actionLabel: { color: '#94A3B8', fontSize: 11, fontWeight: '500' },
@@ -791,30 +1044,51 @@ const styles = StyleSheet.create({
   sectionSub: { color: '#64748B', fontSize: 13, fontWeight: '500' },
   horizontalScroll: { marginHorizontal: -16, paddingHorizontal: 16 },
   filterChip: {
-    backgroundColor: 'rgba(13, 19, 34, 0.8)', paddingHorizontal: 16, paddingVertical: 8,
-    borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: 'rgba(13, 19, 34, 0.8)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
   },
   filterChipActive: { backgroundColor: '#A855F7', borderColor: '#A855F7' },
   filterChipText: { color: '#94A3B8', fontSize: 12, fontWeight: '600' },
   filterChipTextActive: { color: '#FFFFFF', fontWeight: '800' },
   miniCard: {
-    backgroundColor: 'rgba(13, 19, 34, 0.8)', borderRadius: 18, padding: 14, marginRight: 10,
-    flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)', minWidth: 165,
+    backgroundColor: 'rgba(13, 19, 34, 0.8)',
+    borderRadius: 18,
+    padding: 14,
+    marginRight: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+    minWidth: 165,
   },
   coinIcon: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
   miniCardTitle: { color: '#64748B', fontSize: 11, fontWeight: '500' },
   miniCardVal: { fontSize: 13, fontWeight: '800', marginTop: 2 },
   listContainer: { gap: 8 },
   cryptoItem: {
-    backgroundColor: 'rgba(13, 19, 34, 0.75)', borderRadius: 18, padding: 12,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: 'rgba(13, 19, 34, 0.75)',
+    borderRadius: 18,
+    padding: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
   },
   cryptoLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   cryptoIcon: {
-    width: 36, height: 36, borderRadius: 18, backgroundColor: '#1E293B',
-    justifyContent: 'center', alignItems: 'center',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#1E293B',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   titleWrapper: { flex: 1, paddingRight: 6 },
   cryptoName: { color: '#FFFFFF', fontSize: 12, fontWeight: '600', lineHeight: 16 },
@@ -832,27 +1106,69 @@ const styles = StyleSheet.create({
   modalSaveBtn: { backgroundColor: '#A855F7', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
   btnTextSave: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
   shopSelectItem: {
-    padding: 14, borderRadius: 12, backgroundColor: '#161F33', marginBottom: 8,
-    borderWidth: 1, borderColor: 'transparent',
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: '#161F33',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   shopSelectItemActive: { backgroundColor: 'rgba(168, 85, 247, 0.15)', borderColor: '#A855F7' },
   shopSelectText: { color: '#94A3B8', fontSize: 13, fontWeight: '600' },
   shopSelectTextActive: { color: '#FFF', fontWeight: '800' },
   tableHeaderRow: {
-    flexDirection: 'row', paddingVertical: 8, paddingHorizontal: 6, borderBottomWidth: 1,
-    borderBottomColor: '#334155', backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: 6, marginTop: 4,
+    flexDirection: 'row',
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#334155',
+    backgroundColor: 'rgba(255,255,255,0.02)',
+    borderRadius: 6,
+    marginTop: 4,
   },
   tableHeaderText: { color: '#94A3B8', fontSize: 11, fontWeight: '700' },
   tableRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: 8, paddingHorizontal: 6, borderBottomWidth: 1, borderBottomColor: '#161F33',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#161F33',
   },
   tableCellText: { fontSize: 11 },
   usdRateFooter: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: 'rgba(56, 189, 248, 0.1)', borderRadius: 12, padding: 10, marginTop: 8,
-    borderWidth: 1, borderColor: 'rgba(56, 189, 248, 0.25)',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+    borderRadius: 12,
+    padding: 10,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.25)',
   },
   usdRateText: { color: '#38BDF8', fontSize: 11, fontWeight: '600' },
   usdRateValue: { color: '#FFF', fontSize: 12, fontWeight: '800' },
+
+  /* СТИЛИ ДЛЯ СКАНЕРА И РЕЗУЛЬТАТОВ */
+  cameraBox: {
+    height: 180,
+    backgroundColor: '#000',
+    borderRadius: 16,
+    overflow: 'hidden',
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  cameraCenter: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 10 },
+  permBtn: { backgroundColor: '#A855F7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  resultCard: {
+    backgroundColor: '#161F33',
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 153, 0.3)',
+  },
 });

@@ -16,7 +16,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { Buffer } from 'buffer';
 
 const { width } = Dimensions.get('window');
 
@@ -182,41 +181,60 @@ export default function HomeScreen() {
     [getPurchasePrice]
   );
 
-  const fetchFullData = async () => {
+  const fetchFullData = useCallback(async () => {
     setLoading(true);
     setUpdateStatus('Загрузка...');
     const headers = { Authorization: TOKEN, Accept: '*/*' };
 
     try {
-      const shopsUrl = getEndpointUrl('/shops');
-      const shopsRaw = await fetch(shopsUrl, { headers }).then((r) => r.text());
-      const shopsData = safeJsonParse(shopsRaw);
+      let currentShops = shops;
+      if (currentShops.length === 0) {
+        const shopsUrl = getEndpointUrl('/shops');
+        const shopsRaw = await fetch(shopsUrl, { headers }).then((r) => r.text());
+        const shopsData = safeJsonParse(shopsRaw);
 
-      let fetchedShops: Shop[] = [];
-      if (shopsData && Array.isArray(shopsData) && shopsData.length > 0) {
-        fetchedShops = shopsData.map((s: any) => ({
-          id: String(s.id || s.shopId),
-          title: s.title || s.name || `Магазин #${s.id}`,
-        }));
+        if (shopsData && Array.isArray(shopsData) && shopsData.length > 0) {
+          currentShops = shopsData.map((s: any) => ({
+            id: String(s.id || s.shopId),
+            title: s.title || s.name || `Магазин #${s.id}`,
+          }));
+          setShops(currentShops);
+        }
       }
-      setShops(fetchedShops);
 
-      const shopIdsParam = selectedShopId === 'ALL' ? fetchedShops.map((s) => s.id).join(',') : selectedShopId;
+      const shopIdsParam = selectedShopId === 'ALL' ? currentShops.map((s) => s.id).join(',') : selectedShopId;
 
-      const financeUrl = getEndpointUrl(`/finance/orders?page=0&size=100${shopIdsParam ? `&shopIds=${shopIdsParam}` : ''}`);
-      const oResRaw = await fetch(financeUrl, { headers });
-      const oResText = await oResRaw.text();
-      const oRes = safeJsonParse(oResText) || {};
-      const orders = oRes.orderItems || oRes.orders || oRes.data || [];
+      let allOrders: any[] = [];
+      let page = 0;
+      let hasMore = true;
 
-      setRawOrders(orders);
+      // Пагинация для полной загрузки списка заказов
+      while (hasMore && page < 5) {
+        const financeUrl = getEndpointUrl(
+          `/finance/orders?page=${page}&size=100${shopIdsParam ? `&shopIds=${shopIdsParam}` : ''}`
+        );
+        const oResRaw = await fetch(financeUrl, { headers });
+        const oResText = await oResRaw.text();
+        const oRes = safeJsonParse(oResText) || {};
+        const orders = oRes.orderItems || oRes.orders || oRes.data || [];
+
+        if (orders.length === 0) {
+          hasMore = false;
+        } else {
+          allOrders = [...allOrders, ...orders];
+          page += 1;
+          if (orders.length < 100) hasMore = false;
+        }
+      }
+
+      setRawOrders(allOrders);
       setUpdateStatus('Обновлено ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     } catch (e) {
       setUpdateStatus('Ошибка API');
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedShopId, shops]);
 
   // --- ОБРАБОТКА И ПОЛУЧЕНИЕ ЭТИКЕТКИ ДЛЯ СКАНИРОВАННОГО ЗАКАЗА ---
   const handleFetchOrderAndLabel = async (orderId: string) => {
@@ -224,7 +242,6 @@ export default function HomeScreen() {
     setScanningLoading(true);
     setScannedOrderId(orderId);
 
-    // Находим информацию о заказе локально
     const localFound = rawOrders.find((o) => String(o.orderId || o.id) === String(orderId));
     setScannedOrderData(localFound || null);
 
@@ -234,26 +251,11 @@ export default function HomeScreen() {
 
       const res = await fetch(labelUrl, { headers });
       const responseText = await res.text();
-
-      // Очищаем полученную строку от пробелов или кавычек
       const base64Clean = responseText.replace(/^"|"$/g, '').trim();
 
       if (base64Clean && base64Clean.length > 50) {
-        let pdfDataUrl = `data:application/pdf;base64,${base64Clean}`;
+        const pdfDataUrl = `data:application/pdf;base64,${base64Clean}`;
         setScannedPdfUri(pdfDataUrl);
-
-        if (Platform.OS === 'web') {
-          // Для веба - открываем PDF в новой вкладке для моментальной печати
-          const byteCharacters = atob(base64Clean);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-          }
-          const byteArray = new Uint8Array(byteNumbers);
-          const blob = new Blob([byteArray], { type: 'application/pdf' });
-          const fileURL = URL.createObjectURL(blob);
-          window.open(fileURL, '_blank');
-        }
       } else {
         Alert.alert('Ошибка', 'Не удалось загрузить этикетку заказа');
       }
@@ -493,7 +495,6 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.actionGrid}>
-            {/* КНОПКА СКАНИРОВАНИЯ ВМЕСТО КНОПКИ ОБНОВИТЬ */}
             <TouchableOpacity
               style={styles.actionBtn}
               onPress={() => {
@@ -779,9 +780,14 @@ export default function HomeScreen() {
                         style={[styles.modalSaveBtn, { backgroundColor: '#00E599', width: '100%' }]}
                         onPress={() => {
                           if (Platform.OS === 'web') {
-                            window.open(scannedPdfUri, '_blank');
+                            const win = window.open();
+                            if (win) {
+                              win.document.write(
+                                `<iframe src="${scannedPdfUri}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`
+                              );
+                            }
                           } else {
-                            Alert.alert('Печать', 'PDF файл готов для отправки на принтер!');
+                            Alert.alert('Печать', 'PDF файл готов для отправки на термопринтер!');
                           }
                         }}
                       >

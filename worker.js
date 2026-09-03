@@ -3,35 +3,39 @@ const UZUM_API_BASE = 'https://api-seller.uzum.uz/api/seller-openapi/v1';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': '*',
-  'Access-Control-Max-Age': '86400',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
 };
 
 export default {
-  async fetch(request) {
-    const url = new URL(request.url);
-
+  async fetch(request, env, ctx) {
+    // 1. Обработка OPTIONS (Preflight)
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders });
+      return new Response(null, {
+        headers: corsHeaders,
+      });
     }
 
+    const url = new URL(request.url);
+
+    // Перенаправляем все запросы вида /api-uzum/* на Uzum API
     if (url.pathname.startsWith('/api-uzum/')) {
-      const targetPath = url.pathname.replace(/^\/api-uzum/, '');
+      const targetPath = url.pathname.replace('/api-uzum', '');
       const targetUrl = `${UZUM_API_BASE}${targetPath}${url.search}`;
 
-      const headers = new Headers(request.headers);
-      headers.set('Host', 'api-seller.uzum.uz');
+      const modifiedHeaders = new Headers(request.headers);
+      modifiedHeaders.set('Host', 'api-seller.uzum.uz');
 
       try {
         const response = await fetch(targetUrl, {
           method: request.method,
-          headers: headers,
-          body: ['GET', 'HEAD'].includes(request.method) ? null : request.body,
+          headers: modifiedHeaders,
+          body: ['GET', 'HEAD'].includes(request.method) ? null : await request.arrayBuffer(),
         });
 
+        // Клонируем заголовки и добавляем CORS
         const newHeaders = new Headers(response.headers);
-        Object.entries(corsHeaders).forEach(([key, value]) => {
-          newHeaders.set(key, value);
+        Object.keys(corsHeaders).forEach((key) => {
+          newHeaders.set(key, corsHeaders[key]);
         });
 
         return new Response(response.body, {
@@ -40,13 +44,13 @@ export default {
           headers: newHeaders,
         });
       } catch (err) {
-        return new Response(JSON.stringify({ error: 'Proxy request failed', details: err.message }), {
-          status: 502,
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
     }
 
-    return new Response('Not Found', { status: 404, headers: corsHeaders });
+    return new Response('Worker Active', { status: 200, headers: corsHeaders });
   },
 };

@@ -126,13 +126,15 @@ export default function HomeScreen() {
       .catch(() => console.log('Курс USD по умолчанию'));
   }, []);
 
-  const getEndpointUrl = (path: string) => {
-  // Убеждаемся, что path начинается со слэша
+ const getEndpointUrl = (path: string) => {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
 
+  // В веб-версии всегда перенаправляем через Worker
   if (Platform.OS === 'web') {
     return `${WORKER_URL}/api-uzum${normalizedPath}`;
   }
+
+  // На смартфонах можно напрямую к Uzum API
   return `${UZUM_API_BASE}${normalizedPath}`;
 };
 
@@ -482,7 +484,7 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          <Text style={styles.chartHeaderTitle}>12Динамика продаж</Text>
+          <Text style={styles.chartHeaderTitle}>Динамика продаж</Text>
 
           <View style={styles.svgChartContainer}>
             <Svg width={chartWidth} height={chartHeight}>

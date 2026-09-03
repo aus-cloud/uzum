@@ -23,7 +23,8 @@ const TOKEN = 'WrySS4WWywOf5hRW5QZdDU6TR7TU38L4cthoMRxSBz0=';
 const UZUM_API_BASE = 'https://api-seller.uzum.uz/api/seller-openapi/v1';
 
 // Укажите поддомен вашего Cloudflare Worker после деплоя
-const WORKER_URL = 'https://uzum-proxy.<your-subdomain>.workers.dev';
+const WORKER_URL = 'https://uzum.sirojov0660.workers.dev';
+
 
 const STATUS_TRANSLATIONS: { [key: string]: { label: string; color: string } } = {
   PROCESSING: { label: 'В обработке', color: '#38BDF8' },

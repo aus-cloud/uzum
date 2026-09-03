@@ -477,7 +477,7 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          <Text style={styles.chartHeaderTitle}>Динамика продаж</Text>
+          <Text style={styles.chartHeaderTitle}>1Динамика продаж</Text>
 
           <View style={styles.svgChartContainer}>
             <Svg width={chartWidth} height={chartHeight}>

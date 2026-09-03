@@ -22,6 +22,9 @@ const { width } = Dimensions.get('window');
 const TOKEN = 'WrySS4WWywOf5hRW5QZdDU6TR7TU38L4cthoMRxSBz0=';
 const UZUM_API_BASE = 'https://api-seller.uzum.uz/api/seller-openapi/v1';
 
+// Укажите поддомен вашего Cloudflare Worker после деплоя
+const WORKER_URL = 'https://uzum-proxy.<your-subdomain>.workers.dev';
+
 const STATUS_TRANSLATIONS: { [key: string]: { label: string; color: string } } = {
   PROCESSING: { label: 'В обработке', color: '#38BDF8' },
   COMPLETED: { label: 'Завершен', color: '#00E599' },
@@ -122,10 +125,12 @@ export default function HomeScreen() {
       .catch(() => console.log('Курс USD по умолчанию'));
   }, []);
 
-  // Использование своего Cloudflare Worker в веб-платформе вместо allorigins.win
+  // Формирование URL запроса с учетом проксирования через Cloudflare Worker
   const getEndpointUrl = (path: string) => {
     if (Platform.OS === 'web') {
-      return `/api-uzum${path}`;
+      // Использовать относительный путь при локальной разработке с webpack proxy
+      // или прямой URL воркера при продакшене
+      return `${WORKER_URL}/api-uzum${path}`;
     }
     return `${UZUM_API_BASE}${path}`;
   };
@@ -402,7 +407,6 @@ export default function HomeScreen() {
       }));
   }, [manualPrices, searchPriceQuery, usdRate]);
 
-  // Расчет значений SVG-путей с гарантированной защитой от ошибочного синтаксиса (M command missing)
   const chartWidth = width - 72;
   const chartHeight = 110;
   const maxSales = Math.max(...dailyStats.map((d) => d.totalSales), 100);
@@ -477,7 +481,7 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          <Text style={styles.chartHeaderTitle}>1Динамика продаж</Text>
+          <Text style={styles.chartHeaderTitle}>Динамика продаж</Text>
 
           <View style={styles.svgChartContainer}>
             <Svg width={chartWidth} height={chartHeight}>

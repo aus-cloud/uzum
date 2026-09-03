@@ -122,12 +122,12 @@ export default function HomeScreen() {
       .catch(() => console.log('Курс USD по умолчанию'));
   }, []);
 
+  // Использование своего Cloudflare Worker в веб-платформе вместо allorigins.win
   const getEndpointUrl = (path: string) => {
-    const fullUrl = `${UZUM_API_BASE}${path}`;
-    if (Platform.OS !== 'web') return fullUrl;
-    const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app');
-    if (isVercel) return `/api-uzum${path}`;
-    return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(fullUrl);
+    if (Platform.OS === 'web') {
+      return `/api-uzum${path}`;
+    }
+    return `${UZUM_API_BASE}${path}`;
   };
 
   const safeJsonParse = (text: string) => {
@@ -208,7 +208,6 @@ export default function HomeScreen() {
       let page = 0;
       let hasMore = true;
 
-      // Пагинация для полной загрузки списка заказов
       while (hasMore && page < 5) {
         const financeUrl = getEndpointUrl(
           `/finance/orders?page=${page}&size=100${shopIdsParam ? `&shopIds=${shopIdsParam}` : ''}`
@@ -236,7 +235,6 @@ export default function HomeScreen() {
     }
   }, [selectedShopId, shops]);
 
-  // --- ОБРАБОТКА И ПОЛУЧЕНИЕ ЭТИКЕТКИ ДЛЯ СКАНИРОВАННОГО ЗАКАЗА ---
   const handleFetchOrderAndLabel = async (orderId: string) => {
     if (!orderId) return;
     setScanningLoading(true);
@@ -404,6 +402,7 @@ export default function HomeScreen() {
       }));
   }, [manualPrices, searchPriceQuery, usdRate]);
 
+  // Расчет значений SVG-путей с гарантированной защитой от ошибочного синтаксиса (M command missing)
   const chartWidth = width - 72;
   const chartHeight = 110;
   const maxSales = Math.max(...dailyStats.map((d) => d.totalSales), 100);
@@ -414,8 +413,8 @@ export default function HomeScreen() {
   }));
 
   const buildSmoothPath = (points: { x: number; y: number }[]) => {
-    if (points.length === 0) return '';
-    let d = `M ${points[0].x} ${points[0].y}`;
+    if (!points || points.length === 0) return 'M 0 0';
+    let d = `M ${points[0].x || 0} ${points[0].y || 0}`;
     for (let i = 0; i < points.length - 1; i++) {
       const p0 = points[i === 0 ? i : i - 1];
       const p1 = points[i];
@@ -433,7 +432,7 @@ export default function HomeScreen() {
   };
 
   const linePath = buildSmoothPath(pts);
-  const fillPath = `${linePath} L ${chartWidth} ${chartHeight} L 0 ${chartHeight} Z`;
+  const fillPath = linePath ? `${linePath} L ${chartWidth} ${chartHeight} L 0 ${chartHeight} Z` : 'M 0 0';
 
   return (
     <SafeAreaView style={styles.safeContainer} edges={['top', 'left', 'right']}>
@@ -679,7 +678,7 @@ export default function HomeScreen() {
         </View>
       </ScrollView>
 
-      {/* МОДАЛКА СКАНЕРА КОРДОВ / ВВОДА ORDER ID */}
+      {/* МОДАЛКА СКАНЕРА / ВВОДА ORDER ID */}
       <Modal visible={isScannerVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { maxHeight: '90%' }]}>
@@ -1157,7 +1156,6 @@ const styles = StyleSheet.create({
   usdRateText: { color: '#38BDF8', fontSize: 11, fontWeight: '600' },
   usdRateValue: { color: '#FFF', fontSize: 12, fontWeight: '800' },
 
-  /* СТИЛИ ДЛЯ СКАНЕРА И РЕЗУЛЬТАТОВ */
   cameraBox: {
     height: 180,
     backgroundColor: '#000',

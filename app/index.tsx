@@ -125,15 +125,15 @@ export default function HomeScreen() {
       .catch(() => console.log('Курс USD по умолчанию'));
   }, []);
 
-  // Формирование URL запроса с учетом проксирования через Cloudflare Worker
   const getEndpointUrl = (path: string) => {
-    if (Platform.OS === 'web') {
-      // Использовать относительный путь при локальной разработке с webpack proxy
-      // или прямой URL воркера при продакшене
-      return `${WORKER_URL}/api-uzum${path}`;
-    }
-    return `${UZUM_API_BASE}${path}`;
-  };
+  // Убеждаемся, что path начинается со слэша
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
+  if (Platform.OS === 'web') {
+    return `${WORKER_URL}/api-uzum${normalizedPath}`;
+  }
+  return `${UZUM_API_BASE}${normalizedPath}`;
+};
 
   const safeJsonParse = (text: string) => {
     try {
@@ -481,7 +481,7 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          <Text style={styles.chartHeaderTitle}>Динамика продаж</Text>
+          <Text style={styles.chartHeaderTitle}>12Динамика продаж</Text>
 
           <View style={styles.svgChartContainer}>
             <Svg width={chartWidth} height={chartHeight}>
